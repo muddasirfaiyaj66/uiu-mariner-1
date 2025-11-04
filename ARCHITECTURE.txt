@@ -1,0 +1,234 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                   UIU MARINER - ROV CONTROL SYSTEM                        ║
+║                        Architecture Diagram                               ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          OPERATOR STATION (PC)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────┐
+    │         rovControlApp.py (PyQt6 GUI)                │
+    │                                                     │
+    │  ┌──────────────────────────────────────────────┐  │
+    │  │  • Arm/Disarm Controls                       │  │
+    │  │  • Flight Mode Selection                     │  │
+    │  │  • Emergency Stop                            │  │
+    │  │  • Thruster PWM Display (8 channels)         │  │
+    │  │  • Connection Status                         │  │
+    │  │  • Joystick Input Visualization              │  │
+    │  └──────────────────────────────────────────────┘  │
+    │                         │                           │
+    │          ┌──────────────┴──────────────┐            │
+    │          │                             │            │
+    │  ┌───────▼────────┐          ┌────────▼────────┐   │
+    │  │ Joystick       │          │ MAVLink         │   │
+    │  │ Controller     │          │ Connection      │   │
+    │  │                │          │                 │   │
+    │  │ • pygame       │          │ • pymavlink     │   │
+    │  │ • Xbox 360     │          │ • UDP/TCP       │   │
+    │  │ • Axis→PWM     │          │ • RC_OVERRIDE   │   │
+    │  │ • 8-channel    │          │ • Arm/Disarm    │   │
+    │  │ • Emergency    │          │ • Mode Control  │   │
+    │  └────────────────┘          └────────┬────────┘   │
+    │                                       │            │
+    └───────────────────────────────────────┼────────────┘
+                                            │
+                                    config.json
+                                  (Connection Settings)
+                                            │
+════════════════════════════════════════════╪═══════════════════════════════
+                                            │
+                                     ETHERNET / USB
+                               (MAVLink Protocol @ 57600 baud)
+                                            │
+════════════════════════════════════════════╪═══════════════════════════════
+                                            │
+┌───────────────────────────────────────────▼───────────────────────────────┐
+│                     RASPBERRY PI (Optional Router)                        │
+│                                                                           │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │  MAVProxy / mavlink-router                                         │  │
+│  │  • Routes MAVLink between PC and Pixhawk                           │  │
+│  │  • UDP: 14550 (PC) ↔ Serial: /dev/ttyAMA0 (Pixhawk TELEM2)       │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                           │
+└───────────────────────────────────────────┬───────────────────────────────┘
+                                            │
+                                    UART (TX/RX/GND)
+                                    TELEM2 @ 57600
+                                            │
+════════════════════════════════════════════╪═══════════════════════════════
+                                            │
+┌───────────────────────────────────────────▼───────────────────────────────┐
+│                         PIXHAWK AUTOPILOT                                 │
+│                       (ArduSub Firmware v4.5.6+)                          │
+│                                                                           │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │  Flight Controller Functions:                                      │  │
+│  │  • Receives RC_CHANNELS_OVERRIDE (8 channels, 1000-2000 PWM)      │  │
+│  │  • Processes flight mode (MANUAL, STABILIZE, DEPTH_HOLD, etc.)    │  │
+│  │  • Runs mixer (converts inputs → motor outputs)                   │  │
+│  │  • Applies stabilization (gyro/accel/mag/baro)                    │  │
+│  │  • Manages arming state and pre-arm checks                        │  │
+│  │  • Outputs PWM signals on MAIN OUT 1-8                            │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                           │
+│            MAIN OUT 1-8 (PWM @ 50-400 Hz)                                 │
+└────┬────┬────┬────┬────┬────┬────┬────┬──────────────────────────────────┘
+     │    │    │    │    │    │    │    │
+     │    │    │    │    │    │    │    │
+════════════════════════════════════════════════════════════════════════════
+                                            
+┌────▼────┬────┬────┬────┬────┬────┬────┬────────────────────────────────┐
+│  ESCs (Electronic Speed Controllers)                                     │
+│  • T100/T200 Thrusters (BlueRobotics style)                             │
+│  • Each ESC converts PWM → 3-phase AC for brushless motors              │
+└──────────────────────────────────────────────────────────────────────────┘
+     │    │    │    │    │    │    │    │
+     ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          8x THRUSTERS                                   │
+│                                                                         │
+│   T1 (Front Left)      T2 (Right Lateral)    T3 (Front Vert)          │
+│   T4 (Rear Vert)       T5 (Left Lateral)     T6 (Front Vert)          │
+│   T7 (Rear Vert)       T8 (Front Right)                               │
+│                                                                         │
+│   Configuration: Vectored Frame (6 DOF movement)                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════
+
+                            DATA FLOW DIAGRAM
+
+┌─────────────┐
+│  Joystick   │  Left Stick Y:  Forward/Backward
+│  (Xbox 360) │  Left Stick X:  Yaw Left/Right
+└──────┬──────┘  Right Stick Y: Up/Down
+       │         Start Button:  Emergency Stop
+       │
+       ▼
+┌─────────────────────────────────────────────────┐
+│  joystickController.py                          │
+│  ┌────────────────────────────────────────────┐ │
+│  │ 1. Read axes (Left X/Y, Right X/Y)        │ │
+│  │ 2. Apply deadzone (±0.03)                 │ │
+│  │ 3. Convert to PWM (1000-2000)             │ │
+│  │ 4. Compute 8-channel array                │ │
+│  │    [1500, 1500, 1500, 1500, ...]          │ │
+│  │ 5. Emergency stop check                   │ │
+│  └────────────────────────────────────────────┘ │
+└──────────────────────┬──────────────────────────┘
+                       │ [1456, 1623, 1500, 1500, 1377, 1500, 1500, 1544]
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  mavlinkConnection.py                           │
+│  ┌────────────────────────────────────────────┐ │
+│  │ 1. Build RC_CHANNELS_OVERRIDE message     │ │
+│  │ 2. Set target_system / target_component   │ │
+│  │ 3. Pack 8 channels into MAVLink packet    │ │
+│  │ 4. Send via UDP/TCP socket                │ │
+│  └────────────────────────────────────────────┘ │
+└──────────────────────┬──────────────────────────┘
+                       │ MAVLink Packet (binary)
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  Network (Ethernet / USB Serial)                │
+│  • UDP: 192.168.0.104:14550                     │
+│  • TCP: 10.42.0.185:5760                        │
+│  • Serial: COM3 @ 57600 baud                    │
+└──────────────────────┬──────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  Pixhawk (ArduSub Firmware)                     │
+│  ┌────────────────────────────────────────────┐ │
+│  │ 1. Receive RC_CHANNELS_OVERRIDE            │ │
+│  │ 2. Check arming state                      │ │
+│  │ 3. Apply flight mode logic                 │ │
+│  │ 4. Run motor mixer                         │ │
+│  │ 5. Output PWM to MAIN OUT 1-8              │ │
+│  └────────────────────────────────────────────┘ │
+└──────────────────────┬──────────────────────────┘
+                       │ PWM Signals (50-400 Hz)
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  ESCs → Thrusters → Physical Movement          │
+└─────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════
+
+                          CONTROL LOOP TIMING
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  Time: 0ms                                                             │
+│  ├─ GUI Timer fires (10 Hz = 100ms interval)                          │
+│  │                                                                     │
+│  ├─ [5ms] Read joystick (pygame.event.pump())                         │
+│  │   • Get all axes values                                            │
+│  │   • Get button states                                              │
+│  │                                                                     │
+│  ├─ [10ms] Compute thruster channels                                  │
+│  │   • Apply deadzone                                                 │
+│  │   • Convert axes to PWM                                            │
+│  │   • Build 8-element array                                          │
+│  │                                                                     │
+│  ├─ [15ms] Update GUI display                                         │
+│  │   • Show thruster values                                           │
+│  │   • Update joystick axes labels                                    │
+│  │                                                                     │
+│  ├─ [20ms] Send to Pixhawk (if armed)                                 │
+│  │   • Build MAVLink packet                                           │
+│  │   • Send via socket                                                │
+│  │                                                                     │
+│  └─ [25ms] Loop complete, wait for next timer                         │
+│                                                                        │
+│  Time: 100ms → Next iteration                                         │
+└────────────────────────────────────────────────────────────────────────┘
+
+Total latency: ~25-50ms (joystick → Pixhawk)
+
+
+════════════════════════════════════════════════════════════════════════════
+
+                           SAFETY CHAIN
+
+┌──────────────┐
+│  Joystick    │ ──→ Start Button? ──Yes──→ [EMERGENCY STOP]
+└──────┬───────┘                               │
+       │ No                                    ├─→ All channels = 1500
+       ▼                                       ├─→ Disarm command
+┌──────────────┐                               └─→ Stop sending
+│  Deadzone    │ ──→ |Axis| < 0.03? ──Yes──→ [Treat as 0.0]
+└──────┬───────┘
+       │ No
+       ▼
+┌──────────────┐
+│  PWM Clamp   │ ──→ Value < 1000? ──Yes──→ [Clamp to 1000]
+└──────┬───────┘  ──→ Value > 2000? ──Yes──→ [Clamp to 2000]
+       │ No
+       ▼
+┌──────────────┐
+│  Armed?      │ ──→ No? ──Yes──→ [Don't send to Pixhawk]
+└──────┬───────┘
+       │ Yes
+       ▼
+┌──────────────┐
+│  Connected?  │ ──→ No? ──Yes──→ [Stop sending, show error]
+└──────┬───────┘
+       │ Yes
+       ▼
+┌──────────────┐
+│  Send to     │
+│  Pixhawk     │
+└──────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════
+
+                      BUILT BY TEAM UIU HYDRA
+                         November 4, 2025
+
+                    "Clean Code. Safe Operation."
