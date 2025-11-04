@@ -180,15 +180,30 @@ class JoystickController:
         # Update pygame event queue
         pygame.event.pump()
 
-        # Read axes (Xbox 360 standard layout)
-        axes = {
-            "left_x": self.get_axis_value(0),  # Left stick horizontal
-            "left_y": self.get_axis_value(1),  # Left stick vertical
-            "right_x": self.get_axis_value(3),  # Right stick horizontal
-            "right_y": self.get_axis_value(4),  # Right stick vertical
-            "left_trigger": self.get_axis_value(2),  # LT
-            "right_trigger": self.get_axis_value(5),  # RT
-        }
+        # Read axes - Auto-detect controller type
+        # Nintendo Switch Pro Controller uses different axis mapping
+        controller_name = self.joystick_name.lower()
+
+        if "switch" in controller_name:
+            # Nintendo Switch Pro Controller mapping
+            axes = {
+                "left_x": self.get_axis_value(0),  # Left stick horizontal
+                "left_y": self.get_axis_value(1),  # Left stick vertical
+                "right_x": self.get_axis_value(2),  # Right stick horizontal
+                "right_y": self.get_axis_value(3),  # Right stick vertical
+                "left_trigger": self.get_axis_value(4),  # ZL
+                "right_trigger": self.get_axis_value(5),  # ZR
+            }
+        else:
+            # Xbox 360 / Standard gamepad layout
+            axes = {
+                "left_x": self.get_axis_value(0),  # Left stick horizontal
+                "left_y": self.get_axis_value(1),  # Left stick vertical
+                "right_x": self.get_axis_value(3),  # Right stick horizontal
+                "right_y": self.get_axis_value(4),  # Right stick vertical
+                "left_trigger": self.get_axis_value(2),  # LT
+                "right_trigger": self.get_axis_value(5),  # RT
+            }
 
         # Read buttons (Xbox 360 standard layout)
         buttons = {
@@ -270,6 +285,22 @@ class JoystickController:
         # Initialize all channels to neutral
         channels = [self.PWM_NEUTRAL] * 8
 
+        # DEBUG (rate-limited): Raw axis values (avoid spamming console which can block)
+        if not hasattr(self, "_last_axes_log_time"):
+            self._last_axes_log_time = 0.0
+        if time.time() - self._last_axes_log_time > 1.0:  # log at most once per second
+            try:
+                num_axes = self.joystick.get_numaxes()
+                raw_axes = [self.joystick.get_axis(i) for i in range(num_axes)]
+                if any(abs(val) > 0.1 for val in raw_axes):  # only log meaningful movement
+                    axes_str = ", ".join(
+                        [f"Axis{i}={raw_axes[i]:.2f}" for i in range(num_axes)]
+                    )
+                    print(f"[DEBUG] RAW AXES: {axes_str}")
+            except Exception:
+                pass
+            self._last_axes_log_time = time.time()
+
         # Extract axis values
         forward_back = -axes["left_y"]  # Invert Y axis (forward is negative)
         left_right = axes["left_x"]
@@ -277,38 +308,46 @@ class JoystickController:
 
         # Forward/Backward (Channels 1 and 8)
         # From reference: axis_1 < 0 → forward, axis_1 > 0 → backward
-        if abs(forward_back) > 0:
+        if abs(forward_back) > self.DEADZONE:
             value = self.axis_to_pwm(forward_back)
             reverse_value = self.axis_to_pwm(-forward_back)
             channels[0] = value  # Ch1: ACW for forward
             channels[7] = reverse_value  # Ch8: CW for forward
-            print(
-                f"[THRUSTER] Forward/Back: {forward_back:.2f} → Ch1(Pin1)={value}, Ch8(Pin8)={reverse_value}"
-            )
+            # Reduce verbose printing to avoid console-induced stalls
+            if not hasattr(self, "_last_thruster_log_time"):
+                self._last_thruster_log_time = 0.0
+            if time.time() - self._last_thruster_log_time > 0.5:
+                print(
+                    f"[THRUSTER] FB {forward_back:.2f} → Ch1={value}, Ch8={reverse_value}"
+                )
+                self._last_thruster_log_time = time.time()
 
         # Left/Right rotation (Channels 2 and 5)
         # From reference: axis_0 > 0 → right, axis_0 < 0 → left
-        if abs(left_right) > 0:
+        if abs(left_right) > self.DEADZONE:
             value = self.axis_to_pwm(left_right)
             value2 = self.axis_to_pwm(-left_right)
             channels[1] = value  # Ch2
             channels[4] = value2  # Ch5
-            print(
-                f"[THRUSTER] Left/Right: {left_right:.2f} → Ch2(Pin2)={value}, Ch5(Pin5)={value2}"
-            )
+            if time.time() - getattr(self, "_last_thruster_log_time", 0.0) > 0.5:
+                print(f"[THRUSTER] LR {left_right:.2f} → Ch2={value}, Ch5={value2}")
+                self._last_thruster_log_time = time.time()
 
         # Up/Down (Channels 3, 4, 6, 7)
         # From reference: axis_5 < 0 → up, axis_5 > 0 → down
-        if abs(up_down) > 0:
+        # Only apply vertical thrust if the value is outside deadzone
+        if abs(up_down) > self.DEADZONE:
             value = self.axis_to_pwm(up_down)
             value2 = self.axis_to_pwm(-up_down)
             channels[2] = value2  # Ch3: ACW
             channels[3] = value2  # Ch4: ACW
             channels[5] = value  # Ch6: CW
             channels[6] = value  # Ch7: CW
-            print(
-                f"[THRUSTER] Up/Down: {up_down:.2f} → Ch3(Pin3)={value2}, Ch4(Pin4)={value2}, Ch6(Pin6)={value}, Ch7(Pin7)={value}"
-            )
+            if time.time() - getattr(self, "_last_thruster_log_time", 0.0) > 0.5:
+                print(
+                    f"[THRUSTER] UD {up_down:.2f} → Ch3={value2}, Ch4={value2}, Ch6={value}, Ch7={value}"
+                )
+                self._last_thruster_log_time = time.time()
 
         # Emergency stop (Start button)
         if buttons["start"]:

@@ -6,6 +6,7 @@ Main application with camera feeds, object detection, sensor telemetry, and vehi
 import sys
 import os
 import json
+import time
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QWidget
 from PyQt6.QtCore import QTimer, Qt, pyqtSlot
 from PyQt6.QtGui import QPixmap, QFont
@@ -51,22 +52,35 @@ class MarinerROVControl(QMainWindow):
 
         # Setup connections and start threads
         self.setup_connections()
-        self.start_camera_feeds()
-        self.start_sensor_telemetry()
-        self.connect_pixhawk()
-        self.init_joystick()
+
+        # Start components asynchronously for non-blocking startup
+        print("[MARINER] 🚀 Starting components asynchronously...")
+
+        # Start camera feeds (non-blocking)
+        QTimer.singleShot(100, self.start_camera_feeds)
+
+        # Start sensor telemetry (non-blocking with auto-fallback)
+        QTimer.singleShot(200, self.start_sensor_telemetry)
+
+        # Connect to Pixhawk (may take time)
+        QTimer.singleShot(300, self.connect_pixhawk)
+
+        # Initialize joystick
+        QTimer.singleShot(400, self.init_joystick)
 
         # Start control loop
         self.control_timer = QTimer(self)
         self.control_timer.timeout.connect(self.control_loop)
-        self.control_timer.start(100)  # 10 Hz
+        self.control_timer.start(250)  # 4 Hz - Further reduced for USB stability
 
         # UI update timer
         self.ui_update_timer = QTimer(self)
         self.ui_update_timer.timeout.connect(self.update_ui)
-        self.ui_update_timer.start(500)  # 2 Hz for UI updates
+        self.ui_update_timer.start(1000)  # 1 Hz for UI updates - Reduced load
 
-        print("[MARINER] ✅ Application initialized successfully")
+        print(
+            "[MARINER] ✅ Application initialized - components starting in background"
+        )
 
     def load_config(self):
         """Load configuration from JSON file."""
@@ -120,7 +134,8 @@ class MarinerROVControl(QMainWindow):
 
         # Set window properties
         self.setWindowTitle("UIU MARINER - ROV Control System")
-        self.setMinimumSize(1280, 720)
+        self.setMinimumSize(1024, 600)  # More flexible minimum size
+        self.resize(1280, 720)  # Default size but user can resize
 
         # Find and store references to UI elements
         self.find_ui_elements()
@@ -171,15 +186,16 @@ class MarinerROVControl(QMainWindow):
             QLabel {{
                 color: {self.colors['text_primary']};
                 background-color: transparent;
+                font-size: 9pt;
             }}
             QGroupBox {{
                 background-color: {self.colors['bg_secondary']};
                 border: 1px solid {self.colors['border']};
-                border-radius: 8px;
-                padding: 16px;
-                margin-top: 12px;
+                border-radius: 6px;
+                padding: 10px;
+                margin-top: 8px;
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: 10pt;
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
@@ -193,11 +209,12 @@ class MarinerROVControl(QMainWindow):
             QPushButton {{
                 background-color: {self.colors['bg_tertiary']};
                 border: 1px solid {self.colors['border']};
-                border-radius: 6px;
-                padding: 12px 24px;
+                border-radius: 5px;
+                padding: 8px 16px;
                 font-weight: bold;
-                font-size: 10pt;
+                font-size: 9pt;
                 color: {self.colors['text_primary']};
+                min-height: 30px;
             }}
             QPushButton:hover {{
                 background-color: {self.colors['bg_secondary']};
@@ -209,7 +226,8 @@ class MarinerROVControl(QMainWindow):
             QPushButton#btnArm {{
                 background-color: {self.colors['success']};
                 color: #000;
-                font-size: 11pt;
+                font-size: 10pt;
+                font-weight: bold;
             }}
             QPushButton#btnArm:hover {{
                 background-color: #00F0A0;
@@ -217,10 +235,28 @@ class MarinerROVControl(QMainWindow):
             QPushButton#btnEmergencyStop {{
                 background-color: {self.colors['danger']};
                 color: #FFF;
-                font-size: 11pt;
+                font-size: 10pt;
+                font-weight: bold;
             }}
             QPushButton#btnEmergencyStop:hover {{
                 background-color: #FF6060;
+            }}
+            QPushButton#btnManualControl {{
+                background-color: {self.colors['bg_tertiary']};
+                color: {self.colors['accent']};
+                font-size: 9pt;
+                font-weight: bold;
+                border: 2px solid {self.colors['accent']};
+                border-radius: 6px;
+            }}
+            QPushButton#btnManualControl:hover {{
+                background-color: {self.colors['accent']};
+                color: #000;
+            }}
+            QPushButton#btnManualControl:pressed {{
+                background-color: {self.colors['success']};
+                color: #000;
+                border-color: {self.colors['success']};
             }}
         """
         )
@@ -229,21 +265,48 @@ class MarinerROVControl(QMainWindow):
         top_bar = self.create_top_bar()
         main_layout.addWidget(top_bar)
 
-        # === MAIN CONTENT ===
+        # === MAIN CONTENT === (Use scrollable area for better responsiveness)
+        from PyQt6.QtWidgets import QScrollArea
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(
+            f"""
+            QScrollArea {{
+                border: none;
+                background-color: {self.colors['bg_dark']};
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['bg_secondary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['border']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {self.colors['accent']};
+            }}
+        """
+        )
+
         content = QWidget()
         content_layout = QHBoxLayout(content)
-        content_layout.setContentsMargins(16, 16, 16, 16)
-        content_layout.setSpacing(16)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(12)
 
         # Left column: Cameras
         camera_panel = self.create_camera_panel()
-        content_layout.addWidget(camera_panel, 70)
+        content_layout.addWidget(camera_panel, 65)
 
         # Right column: Status & Controls
         right_panel = self.create_right_panel()
-        content_layout.addWidget(right_panel, 30)
+        content_layout.addWidget(right_panel, 35)
 
-        main_layout.addWidget(content)
+        scroll_area.setWidget(content)
+        main_layout.addWidget(scroll_area)
 
         # === BOTTOM BAR ===
         bottom_bar = self.create_bottom_bar()
@@ -254,7 +317,7 @@ class MarinerROVControl(QMainWindow):
         from PyQt6.QtWidgets import QFrame, QHBoxLayout
 
         top_bar = QFrame()
-        top_bar.setFixedHeight(70)
+        top_bar.setFixedHeight(60)  # Reduced height
         top_bar.setStyleSheet(
             f"""
             QFrame {{
@@ -265,7 +328,7 @@ class MarinerROVControl(QMainWindow):
         )
 
         layout = QHBoxLayout(top_bar)
-        layout.setContentsMargins(24, 12, 24, 12)
+        layout.setContentsMargins(16, 8, 16, 8)
 
         # Logo
         logo_label = QLabel()
@@ -276,8 +339,8 @@ class MarinerROVControl(QMainWindow):
             logo_pixmap = QPixmap(logo_path)
             # Scale logo to fit top bar (maintain aspect ratio)
             scaled_logo = logo_pixmap.scaled(
-                50,
-                50,
+                40,
+                40,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -289,10 +352,10 @@ class MarinerROVControl(QMainWindow):
         title = QLabel("UIU MARINER")
         title.setStyleSheet(
             f"""
-            font-size: 24pt;
+            font-size: 18pt;
             font-weight: bold;
             color: {self.colors['accent']};
-            margin-left: 12px;
+            margin-left: 10px;
         """
         )
         layout.addWidget(title)
@@ -303,7 +366,7 @@ class MarinerROVControl(QMainWindow):
         system_label = QLabel("ROV CONTROL SYSTEM")
         system_label.setStyleSheet(
             f"""
-            font-size: 10pt;
+            font-size: 9pt;
             color: {self.colors['text_secondary']};
             font-weight: bold;
         """
@@ -328,30 +391,31 @@ class MarinerROVControl(QMainWindow):
         )
 
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         # Main camera
         main_label = QLabel("PRIMARY CAMERA")
         main_label.setStyleSheet(
             f"""
-            font-size: 10pt;
+            font-size: 9pt;
             font-weight: bold;
             color: {self.colors['accent']};
-            padding: 8px;
+            padding: 6px;
         """
         )
         layout.addWidget(main_label)
 
         self.lblCameraMain = QLabel("🎥 Waiting for video feed...")
-        self.lblCameraMain.setMinimumSize(960, 540)
+        self.lblCameraMain.setMinimumSize(640, 360)  # More flexible size
+        self.lblCameraMain.setScaledContents(False)
         self.lblCameraMain.setStyleSheet(
             f"""
             background-color: #000;
             border: 2px solid {self.colors['border_accent']};
-            border-radius: 8px;
+            border-radius: 6px;
             color: {self.colors['text_secondary']};
-            font-size: 14pt;
+            font-size: 11pt;
         """
         )
         self.lblCameraMain.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -361,23 +425,24 @@ class MarinerROVControl(QMainWindow):
         secondary_label = QLabel("SECONDARY CAMERA")
         secondary_label.setStyleSheet(
             f"""
-            font-size: 9pt;
+            font-size: 8pt;
             font-weight: bold;
             color: {self.colors['text_secondary']};
-            padding: 8px;
+            padding: 6px;
         """
         )
         layout.addWidget(secondary_label)
 
         self.lblCameraSmall = QLabel("🎥 Waiting for video feed...")
-        self.lblCameraSmall.setMinimumSize(480, 270)
+        self.lblCameraSmall.setMinimumSize(320, 180)  # More flexible size
+        self.lblCameraSmall.setScaledContents(False)
         self.lblCameraSmall.setStyleSheet(
             f"""
             background-color: #000;
             border: 1px solid {self.colors['border']};
-            border-radius: 6px;
+            border-radius: 5px;
             color: {self.colors['text_secondary']};
-            font-size: 11pt;
+            font-size: 9pt;
         """
         )
         self.lblCameraSmall.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -481,23 +546,23 @@ class MarinerROVControl(QMainWindow):
 
         group = QGroupBox("SENSOR TELEMETRY")
         layout = QGridLayout(group)
-        layout.setSpacing(16)
-        layout.setContentsMargins(16, 24, 16, 16)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 16, 10, 10)
 
         # Depth
         depth_label = QLabel("Depth")
         depth_label.setStyleSheet(
-            f"font-size: 9pt; color: {self.colors['text_secondary']};"
+            f"font-size: 8pt; color: {self.colors['text_secondary']};"
         )
         self.lblDepth = QLabel("0.0 m")
         self.lblDepth.setStyleSheet(
             f"""
-            font-size: 20pt;
+            font-size: 16pt;
             font-weight: bold;
             color: {self.colors['accent']};
-            padding: 8px;
+            padding: 6px;
             background-color: {self.colors['bg_tertiary']};
-            border-radius: 6px;
+            border-radius: 5px;
         """
         )
         self.lblDepth.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -507,17 +572,17 @@ class MarinerROVControl(QMainWindow):
         # Temperature
         temp_label = QLabel("Temperature")
         temp_label.setStyleSheet(
-            f"font-size: 9pt; color: {self.colors['text_secondary']};"
+            f"font-size: 8pt; color: {self.colors['text_secondary']};"
         )
         self.lblTemperature = QLabel("0.0°C")
         self.lblTemperature.setStyleSheet(
             f"""
-            font-size: 16pt;
+            font-size: 13pt;
             font-weight: bold;
             color: {self.colors['text_primary']};
-            padding: 8px;
+            padding: 5px;
             background-color: {self.colors['bg_tertiary']};
-            border-radius: 6px;
+            border-radius: 5px;
         """
         )
         self.lblTemperature.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -527,17 +592,17 @@ class MarinerROVControl(QMainWindow):
         # Pressure
         pressure_label = QLabel("Pressure")
         pressure_label.setStyleSheet(
-            f"font-size: 9pt; color: {self.colors['text_secondary']};"
+            f"font-size: 8pt; color: {self.colors['text_secondary']};"
         )
         self.lblPressure = QLabel("0.0 hPa")
         self.lblPressure.setStyleSheet(
             f"""
-            font-size: 16pt;
+            font-size: 13pt;
             font-weight: bold;
             color: {self.colors['text_primary']};
-            padding: 8px;
+            padding: 5px;
             background-color: {self.colors['bg_tertiary']};
-            border-radius: 6px;
+            border-radius: 5px;
         """
         )
         self.lblPressure.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -552,32 +617,97 @@ class MarinerROVControl(QMainWindow):
 
         group = QGroupBox("CONTROL PANEL")
         layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 24, 16, 16)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 16, 10, 10)
 
         # ARM button
         self.btnArm = QPushButton("🔓 ARM THRUSTERS")
         self.btnArm.setObjectName("btnArm")
-        self.btnArm.setMinimumHeight(50)
+        self.btnArm.setMinimumHeight(45)
         self.btnArm.clicked.connect(self.toggle_arm)
         layout.addWidget(self.btnArm)
 
         # Emergency Stop
         self.btnEmergencyStop = QPushButton("⚠️ EMERGENCY STOP")
         self.btnEmergencyStop.setObjectName("btnEmergencyStop")
-        self.btnEmergencyStop.setMinimumHeight(50)
+        self.btnEmergencyStop.setMinimumHeight(45)
         self.btnEmergencyStop.clicked.connect(self.emergency_stop)
         layout.addWidget(self.btnEmergencyStop)
 
+        # Separator for manual controls
+        manual_separator = QLabel("─" * 25)
+        manual_separator.setStyleSheet(
+            f"color: {self.colors['border']}; padding: 6px 0px; font-size: 8pt;"
+        )
+        manual_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(manual_separator)
+
+        # Manual Control Section Label
+        manual_label = QLabel("🎮 MANUAL CONTROLS")
+        manual_label.setStyleSheet(
+            f"""
+            font-size: 8pt;
+            font-weight: bold;
+            color: {self.colors['accent']};
+            padding: 3px;
+        """
+        )
+        manual_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(manual_label)
+
+        # Manual control buttons in grid layout
+        from PyQt6.QtWidgets import QGridLayout, QWidget
+
+        manual_widget = QWidget()
+        manual_layout = QGridLayout(manual_widget)
+        manual_layout.setSpacing(8)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Forward button (top center)
+        self.btnForward = QPushButton("⬆️ FWD")
+        self.btnForward.setObjectName("btnManualControl")
+        self.btnForward.setMinimumHeight(40)
+        self.btnForward.pressed.connect(lambda: self.send_manual_command("forward"))
+        self.btnForward.released.connect(self.stop_manual_command)
+        manual_layout.addWidget(self.btnForward, 0, 1)
+
+        # Left button (middle left)
+        self.btnLeft = QPushButton("⬅️ LEFT")
+        self.btnLeft.setObjectName("btnManualControl")
+        self.btnLeft.setMinimumHeight(40)
+        self.btnLeft.pressed.connect(lambda: self.send_manual_command("left"))
+        self.btnLeft.released.connect(self.stop_manual_command)
+        manual_layout.addWidget(self.btnLeft, 1, 0)
+
+        # Right button (middle right)
+        self.btnRight = QPushButton("➡️ RIGHT")
+        self.btnRight.setObjectName("btnManualControl")
+        self.btnRight.setMinimumHeight(40)
+        self.btnRight.pressed.connect(lambda: self.send_manual_command("right"))
+        self.btnRight.released.connect(self.stop_manual_command)
+        manual_layout.addWidget(self.btnRight, 1, 2)
+
+        # Backward button (bottom center)
+        self.btnBackward = QPushButton("⬇️ BWD")
+        self.btnBackward.setObjectName("btnManualControl")
+        self.btnBackward.setMinimumHeight(40)
+        self.btnBackward.pressed.connect(lambda: self.send_manual_command("backward"))
+        self.btnBackward.released.connect(self.stop_manual_command)
+        manual_layout.addWidget(self.btnBackward, 2, 1)
+
+        layout.addWidget(manual_widget)
+
         # Toggle Detection
         self.btnToggleDetection = QPushButton("👁️ Toggle Detection")
-        self.btnToggleDetection.setMinimumHeight(40)
+        self.btnToggleDetection.setMinimumHeight(36)
         self.btnToggleDetection.clicked.connect(self.toggle_detection)
         layout.addWidget(self.btnToggleDetection)
 
         # Separator
-        separator = QLabel("─" * 30)
-        separator.setStyleSheet(f"color: {self.colors['border']}; padding: 8px 0px;")
+        separator = QLabel("─" * 25)
+        separator.setStyleSheet(
+            f"color: {self.colors['border']}; padding: 6px 0px; font-size: 8pt;"
+        )
         separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(separator)
 
@@ -585,10 +715,10 @@ class MarinerROVControl(QMainWindow):
         camera_label = QLabel("📹 CAMERA CONTROLS")
         camera_label.setStyleSheet(
             f"""
-            font-size: 9pt;
+            font-size: 8pt;
             font-weight: bold;
             color: {self.colors['accent']};
-            padding: 4px;
+            padding: 3px;
         """
         )
         camera_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -597,16 +727,16 @@ class MarinerROVControl(QMainWindow):
         # Camera Configuration
         self.btnCameraConfig = QPushButton("📹 Camera Settings")
         self.btnCameraConfig.setObjectName("btnCameraConfig")
-        self.btnCameraConfig.setMinimumHeight(50)
+        self.btnCameraConfig.setMinimumHeight(42)
         self.btnCameraConfig.setStyleSheet(
             f"""
             QPushButton#btnCameraConfig {{
                 background-color: {self.colors['accent']};
                 color: white;
-                font-size: 11pt;
+                font-size: 9pt;
                 font-weight: bold;
                 border: none;
-                border-radius: 8px;
+                border-radius: 6px;
             }}
             QPushButton#btnCameraConfig:hover {{
                 background-color: {self.colors['accent_hover']};
@@ -619,7 +749,7 @@ class MarinerROVControl(QMainWindow):
         # Restart Camera Feeds
         self.btnRestartCameras = QPushButton("🔄 Restart Cameras")
         self.btnRestartCameras.setObjectName("btnRestartCameras")
-        self.btnRestartCameras.setMinimumHeight(45)
+        self.btnRestartCameras.setMinimumHeight(38)
         self.btnRestartCameras.setStyleSheet(
             f"""
             QPushButton#btnRestartCameras {{
@@ -645,7 +775,7 @@ class MarinerROVControl(QMainWindow):
         from PyQt6.QtWidgets import QFrame, QHBoxLayout
 
         bottom_bar = QFrame()
-        bottom_bar.setFixedHeight(40)
+        bottom_bar.setFixedHeight(35)  # More compact
         bottom_bar.setStyleSheet(
             f"""
             QFrame {{
@@ -656,18 +786,22 @@ class MarinerROVControl(QMainWindow):
         )
 
         layout = QHBoxLayout(bottom_bar)
-        layout.setContentsMargins(24, 8, 24, 8)
+        layout.setContentsMargins(16, 6, 16, 6)
 
         # Connection info (will be updated dynamically)
         self.conn_label = QLabel("● Network: Connecting...")
-        self.conn_label.setStyleSheet(f"color: {self.colors['warning']};")
+        self.conn_label.setStyleSheet(
+            f"color: {self.colors['warning']}; font-size: 8pt;"
+        )
         layout.addWidget(self.conn_label)
 
         layout.addStretch()
 
         # Version info
-        version_label = QLabel("UIU MARINER v1.0 | ArduSub Compatible | 8-Thruster ROV")
-        version_label.setStyleSheet(f"color: {self.colors['text_secondary']};")
+        version_label = QLabel("UIU MARINER v1.0 | ArduSub | 8-Thruster ROV")
+        version_label.setStyleSheet(
+            f"color: {self.colors['text_secondary']}; font-size: 8pt;"
+        )
         layout.addWidget(version_label)
 
         return bottom_bar
@@ -790,14 +924,18 @@ class MarinerROVControl(QMainWindow):
     def start_sensor_telemetry(self):
         """Start sensor telemetry worker."""
         try:
-            if self.config["sensors"]["mock_mode"]:
+            # Always start in mock mode initially for faster startup
+            # Will auto-switch to real mode if available
+            if self.config["sensors"].get("mock_mode", False):
                 self.sensor_worker = MockSensorWorker()
-                print("[SENSORS] Using mock data (testing mode)")
+                print("[SENSORS] 🔧 Using mock data (testing mode)")
             else:
+                # Try real sensor connection with auto-fallback to mock
                 self.sensor_worker = SensorTelemetryWorker(
                     host=self.config["sensors"]["host"],
                     port=self.config["sensors"]["port"],
                     protocol=self.config["sensors"]["protocol"],
+                    auto_mock_fallback=True,  # NEW: Auto-switch to mock on failure
                 )
 
             # Connect signals with QueuedConnection to ensure thread safety
@@ -808,13 +946,47 @@ class MarinerROVControl(QMainWindow):
                 self.handle_sensor_status, Qt.ConnectionType.QueuedConnection
             )
 
-            # Start worker thread
+            # NEW: Connect error signal to trigger mock fallback
+            if hasattr(self.sensor_worker, "error_occurred"):
+                self.sensor_worker.error_occurred.connect(
+                    self.handle_sensor_error, Qt.ConnectionType.QueuedConnection
+                )
+
+            # Start worker thread (non-blocking)
             self.sensor_worker.start()
+
+            # Force GUI to remain responsive
+            QApplication.processEvents()
+
         except Exception as e:
             print(f"[SENSORS] ❌ Failed to start: {e}")
+            # Fallback to mock mode on any error
+            self._fallback_to_mock_sensors()
             import traceback
 
             traceback.print_exc()
+
+    def _fallback_to_mock_sensors(self):
+        """Fallback to mock sensor mode."""
+        print("[SENSORS] 🔄 Falling back to mock mode...")
+        try:
+            self.sensor_worker = MockSensorWorker()
+            self.sensor_worker.data_received.connect(
+                self.update_sensor_display, Qt.ConnectionType.QueuedConnection
+            )
+            self.sensor_worker.connection_status.connect(
+                self.handle_sensor_status, Qt.ConnectionType.QueuedConnection
+            )
+            self.sensor_worker.start()
+            print("[SENSORS] ✅ Mock mode active")
+        except Exception as e:
+            print(f"[SENSORS] ❌ Even mock mode failed: {e}")
+
+    @pyqtSlot(str)
+    def handle_sensor_error(self, error_msg):
+        """Handle sensor connection errors."""
+        print(f"[SENSORS] ⚠️ Error: {error_msg}")
+        # Could trigger UI notification here
 
     def connect_pixhawk(self):
         """Connect to Pixhawk via MAVLink."""
@@ -928,12 +1100,27 @@ class MarinerROVControl(QMainWindow):
                 self.lblSensorStatus.setText("🔴 Disconnected")
                 self.lblSensorStatus.setStyleSheet("color: #FF0000;")
 
-        # Update bottom bar network status
+        # Update bottom bar network status based on PIXHAWK connection
+        # (Pi is connected if Pixhawk MAVProxy is accessible)
         if hasattr(self, "conn_label") and self.conn_label:
-            if connected:
-                pi_host = self.config.get("sensors", {}).get(
-                    "host", "raspberrypi.local"
+            # Check Pi connection via Pixhawk MAVProxy status
+            pi_connected = (
+                self.pixhawk and self.pixhawk.check_connection()
+                if hasattr(self, "pixhawk")
+                else False
+            )
+
+            if pi_connected:
+                pi_host = self.config.get(
+                    "mavlink_connection", "tcp:raspberrypi.local:7000"
                 )
+                # Extract hostname from connection string
+                if ":" in pi_host:
+                    pi_host = (
+                        pi_host.split(":")[1]
+                        if len(pi_host.split(":")) > 1
+                        else "raspberrypi.local"
+                    )
                 self.conn_label.setText(f"● Network: {pi_host} (Connected)")
                 self.conn_label.setStyleSheet(f"color: {self.colors['success']};")
             else:
@@ -951,7 +1138,14 @@ class MarinerROVControl(QMainWindow):
             if not self.joystick or not self.joystick.is_ready():
                 return
 
-            if not self.pixhawk or not self.pixhawk.connected:
+            # Check connection status before sending commands
+            try:
+                if not self.pixhawk or not self.pixhawk.check_connection():
+                    return
+            except KeyboardInterrupt:
+                raise  # Allow clean shutdown
+            except Exception as e:
+                print(f"[CONTROL] ⚠️ Connection check error: {e}")
                 return
 
             # Read joystick
@@ -963,9 +1157,26 @@ class MarinerROVControl(QMainWindow):
             # Send to Pixhawk only if armed
             if self.armed:
                 self.pixhawk.send_rc_channels_override(channels)
+            else:
+                # Debug: Show why commands aren't being sent
+                if not hasattr(self, "_last_arm_warning"):
+                    self._last_arm_warning = 0
+                if time.time() - self._last_arm_warning > 5.0:
+                    if any(
+                        abs(ch - 1500) > 10 for ch in channels
+                    ):  # Only warn if joystick moved
+                        print(
+                            "[CONTROL] ⚠️ Commands calculated but NOT sent - System not ARMED!"
+                        )
+                        print(
+                            f"[CONTROL] 💡 Click 'ARM THRUSTERS' button to enable thruster control"
+                        )
+                        self._last_arm_warning = time.time()
 
             self.thruster_values = channels
 
+        except KeyboardInterrupt:
+            raise  # Allow clean shutdown
         except Exception as e:
             print(f"[CONTROL] ⚠️ Control loop error: {e}")
 
@@ -974,7 +1185,18 @@ class MarinerROVControl(QMainWindow):
         try:
             # Update Pixhawk connection status
             if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
-                if self.pixhawk and self.pixhawk.connected:
+                # Check if connection is still alive
+                try:
+                    if self.pixhawk:
+                        is_connected = self.pixhawk.check_connection()
+                    else:
+                        is_connected = False
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
+                    is_connected = False
+
+                if is_connected:
                     self.lblPixhawkStatus.setText(
                         f"🟢 Pixhawk: Connected ({self.pixhawk.link})"
                     )
@@ -1051,6 +1273,68 @@ class MarinerROVControl(QMainWindow):
                     self.lblArmStatus.setStyleSheet("color: #FF8800;")
                 if hasattr(self, "btnArm"):
                     self.btnArm.setText("ARM THRUSTERS")
+
+    def send_manual_command(self, direction):
+        """Send manual thruster command when button pressed."""
+        # Check if Pixhawk is connected and armed
+        if not self.pixhawk or not self.pixhawk.connected:
+            print(f"[MANUAL] ⚠️ Cannot send {direction} command: Pixhawk not connected")
+            return
+
+        if not self.armed:
+            print(f"[MANUAL] ⚠️ Cannot send {direction} command: System not armed")
+            return
+
+        # Create neutral channels (1500 = neutral)
+        channels = [1500] * 8
+
+        # Set thrust based on direction (using moderate power: 1600 or 1400)
+        # Channel mapping (typical for ROV):
+        # 0-3: Forward/lateral thrusters
+        # 4-7: Vertical thrusters
+
+        if direction == "forward":
+            # Forward thrusters (channels 0 and 1)
+            channels[0] = 1600  # Forward power
+            channels[1] = 1600
+            print("[MANUAL] ⬆️ Forward command sent")
+
+        elif direction == "backward":
+            # Backward thrusters
+            channels[0] = 1400  # Reverse power
+            channels[1] = 1400
+            print("[MANUAL] ⬇️ Backward command sent")
+
+        elif direction == "left":
+            # Left strafe (differential thrust)
+            channels[2] = 1400  # Left power
+            channels[3] = 1600
+            print("[MANUAL] ⬅️ Left command sent")
+
+        elif direction == "right":
+            # Right strafe
+            channels[2] = 1600  # Right power
+            channels[3] = 1400
+            print("[MANUAL] ➡️ Right command sent")
+
+        # Send the command
+        try:
+            self.pixhawk.send_rc_channels_override(channels)
+        except Exception as e:
+            print(f"[MANUAL] ❌ Error sending command: {e}")
+
+    def stop_manual_command(self):
+        """Stop manual command when button released (send neutral)."""
+        if not self.pixhawk or not self.pixhawk.connected or not self.armed:
+            return
+
+        # Send neutral commands to stop thrusters
+        neutral = [1500] * 8
+        try:
+            self.pixhawk.send_rc_channels_override(neutral)
+            print("[MANUAL] ⏹️ Manual command stopped (neutral)")
+        except Exception as e:
+            print(f"[MANUAL] ❌ Error stopping command: {e}")
 
     def toggle_detection(self):
         """Toggle object detection on all cameras."""

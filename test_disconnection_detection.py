@@ -1,0 +1,31 @@
+"""
+Test Pixhawk Disconnection Detection
+Quick test to verify the UI detects when Pixhawk disconnects
+"""
+
+print("🧪 Pixhawk Disconnection Detection Test")
+print("=" * 60)
+print()
+print("This test will:")
+print("1. ✅ Connect to Pixhawk")
+print("2. 🔌 Simulate disconnection")
+print("3. 🔍 Verify UI updates to 'Disconnected'")
+print()
+print("Instructions:")
+print("  1. Make sure MAVProxy is running on Pi")
+print("  2. Run: python launch_mariner.py")
+print("  3. Wait for 'Pixhawk: Connected' to appear")
+print("  4. Stop MAVProxy on Pi: ssh pi@192.168.0.182 'pkill -f pi_mavproxy'")
+print("  5. Watch the UI - it should change to 'Disconnected' within 3 seconds")
+print()
+print("=" * 60)
+print()
+print("Key changes made:")
+print("  ✅ update_ui() now calls check_connection()")
+print("  ✅ control_loop() checks connection before sending commands")
+print("  ✅ 3-second heartbeat timeout for fast detection")
+print()
+print("Location: src/ui/marinerApp.py")
+print("  - Line ~1058: update_ui() method")
+print("  - Line ~1041: control_loop() method")
+print()

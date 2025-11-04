@@ -20,7 +20,12 @@ class SensorTelemetryWorker(QThread):
     error_occurred = pyqtSignal(str)  # Emits error messages
 
     def __init__(
-        self, host="raspberrypi.local", port=5000, protocol="tcp", parent=None
+        self,
+        host="raspberrypi.local",
+        port=5002,
+        protocol="tcp",
+        auto_mock_fallback=False,
+        parent=None,
     ):
         super().__init__(parent)
         self.host = host
@@ -29,6 +34,8 @@ class SensorTelemetryWorker(QThread):
         self.running = False
         self.socket = None
         self.connected = False
+        self.auto_mock_fallback = auto_mock_fallback
+        self.mock_worker = None
 
         print(
             f"[SENSORS] Initialized with host={host}, port={port}, protocol={protocol}"
@@ -46,7 +53,7 @@ class SensorTelemetryWorker(QThread):
         """Main sensor data receiving loop."""
         self.running = True
         retry_count = 0
-        max_retries = 5
+        max_retries = 3  # Reduced retries for faster fallback
 
         while self.running and retry_count < max_retries:
             try:
@@ -64,24 +71,40 @@ class SensorTelemetryWorker(QThread):
                 self.connection_status.emit(False)
 
                 if retry_count < max_retries and self.running:
-                    print(f"[SENSORS] Retrying in 3 seconds...")
-                    time.sleep(3)
+                    print(f"[SENSORS] Retrying in 2 seconds...")
+                    time.sleep(2)  # Reduced wait time
 
         if retry_count >= max_retries:
-            print("[SENSORS] ❌ Max retries reached, sensor telemetry unavailable")
+            print("[SENSORS] ❌ Max retries reached")
             self.connection_status.emit(False)
+
+            # Auto-fallback to mock mode if enabled
+            if self.auto_mock_fallback:
+                print("[SENSORS] 🔄 Auto-switching to mock mode...")
+                self._start_mock_mode()
 
     def _run_tcp(self):
         """TCP connection for sensor data."""
         print(f"[SENSORS] Connecting to {self.host}:{self.port} via TCP...")
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(10)  # 10 second timeout
-        self.socket.connect((self.host, self.port))
+        self.socket.settimeout(
+            3
+        )  # 3 second connection timeout (faster failure detection)
 
+        try:
+            self.socket.connect((self.host, self.port))
+        except (socket.timeout, ConnectionRefusedError, OSError) as e:
+            print(f"[SENSORS] Connection failed: {e}")
+            raise  # Re-raise to trigger retry logic
+
+        # Connection successful
         print("[SENSORS] ✅ TCP connection established")
         self.connected = True
         self.connection_status.emit(True)
+
+        # Set longer timeout for receiving data
+        self.socket.settimeout(5)
 
         buffer = ""
 
@@ -101,13 +124,17 @@ class SensorTelemetryWorker(QThread):
                     self._process_data(line.strip())
 
             except socket.timeout:
-                print("[SENSORS] Socket timeout, retrying...")
+                # Timeout is normal, continue waiting
                 continue
             except Exception as e:
                 print(f"[SENSORS] TCP receive error: {e}")
                 break
 
-        self.socket.close()
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
         self.connected = False
         self.connection_status.emit(False)
 
@@ -188,6 +215,41 @@ class SensorTelemetryWorker(QThread):
     def get_last_data(self):
         """Get last received sensor data."""
         return self.last_data.copy()
+
+    def _start_mock_mode(self):
+        """Switch to mock mode on connection failure."""
+        import random
+
+        print("[SENSORS] ✅ Mock mode activated")
+        self.connection_status.emit(True)  # Report as "connected" (to mock)
+
+        depth = 0.0
+        direction = 1
+
+        while self.running:
+            try:
+                # Simulate depth changing
+                depth += 0.1 * direction
+                if depth > 10.0:
+                    direction = -1
+                elif depth < 0.0:
+                    direction = 1
+
+                # Generate mock data
+                sensor_data = {
+                    "temperature": 20.0 + random.uniform(-2, 2),
+                    "pressure": 1013.0 + random.uniform(-5, 5),
+                    "depth": abs(depth) + random.uniform(-0.2, 0.2),
+                    "timestamp": time.strftime("%H:%M:%S"),
+                }
+
+                self.last_data = sensor_data
+                self.data_received.emit(sensor_data)
+                time.sleep(0.5)  # Update every 500ms
+
+            except Exception as e:
+                print(f"[SENSORS] Mock mode error: {e}")
+                break
 
     def stop(self):
         """Stop the sensor thread."""

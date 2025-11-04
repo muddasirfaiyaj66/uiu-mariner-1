@@ -51,13 +51,13 @@ Complete software solution for controlling an underwater ROV (Remotely Operated 
 
 ```powershell
 # Clone or navigate to this directory
-cd "e:\UIU MARINER\mariner-software-1.0"
+cd "F:\Web Development\uiu-mariner\uiu-mariner-1"
 
 # Create virtual environment (recommended)
-python -m venv venv
+python -m venv .venv
 
 # Activate virtual environment
-.\venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 
 # Install required packages
 pip install -r requirements.txt

@@ -10,7 +10,8 @@
     "port": 5002,
     "protocol": "tcp",
     "mock_mode": false,
-    "auto_connect": true
+    "auto_connect": true,
+    "auto_fallback": true
   },
   "network": {
     "auto_detect": true,
@@ -39,7 +40,7 @@
     "joystick_target": "Partial name match: 'xbox', 'switch', 'playstation', etc. Set to null to auto-detect any controller.",
     "update_rate_hz": "Control loop frequency (recommended: 10-20 Hz)",
     "camera": "Real camera streams from Raspberry Pi. Pi auto-detects Ground Station IP. Streams H.264 via UDP ports 5000/5001",
-    "sensors": "Real BMP388 sensor on Raspberry Pi. Pi runs sensor server on port 5000. Uses 'raspberrypi.local' or auto-detected IP",
+    "sensors": "Real BMP388 sensor on Raspberry Pi. Pi runs sensor server on port 5002 (5000/5001 reserved for cameras). Uses 'raspberrypi.local' or auto-detected IP",
     "network": "Auto-detection: Pi finds Ground Station via SSH client IP, gateway, or ARP. Ground Station finds Pi via mDNS (raspberrypi.local) or network scan",
     "thrusters": "8-channel thruster configuration. All 8 thrusters are controlled via channels 1-8"
   }

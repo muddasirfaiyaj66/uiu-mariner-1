@@ -64,27 +64,58 @@ class CameraWorker(QThread):
 
         self.running = True
         self.fps_start_time = time.time()
+        retry_count = 0
+        max_retries = 2  # Quick failure for faster startup
 
         try:
-            # Open camera with GStreamer pipeline
-            self.cap = cv2.VideoCapture(self.pipeline, cv2.CAP_GSTREAMER)
-
-            if not self.cap.isOpened():
-                self.error_occurred.emit(
-                    f"Camera {self.camera_id}: Failed to open stream"
+            while self.running and retry_count < max_retries:
+                # Open camera with GStreamer pipeline
+                print(
+                    f"[CAM{self.camera_id}] Attempting to open stream (attempt {retry_count + 1}/{max_retries})..."
                 )
-                print(f"[CAM{self.camera_id}] ❌ Failed to open: {self.pipeline}")
-                return
+                self.cap = cv2.VideoCapture(self.pipeline, cv2.CAP_GSTREAMER)
 
-            print(f"[CAM{self.camera_id}] ✅ Stream opened successfully")
+                if not self.cap.isOpened():
+                    retry_count += 1
+                    error_msg = f"Camera {self.camera_id}: Failed to open stream"
+                    self.error_occurred.emit(error_msg)
+                    print(f"[CAM{self.camera_id}] ❌ Failed to open: {self.pipeline}")
+
+                    if retry_count < max_retries:
+                        print(f"[CAM{self.camera_id}] Retrying in 1 second...")
+                        time.sleep(1)
+                    else:
+                        print(
+                            f"[CAM{self.camera_id}] Max retries reached, showing placeholder"
+                        )
+                        self._show_placeholder()
+                        return
+                    continue
+
+                # Successfully opened
+                print(f"[CAM{self.camera_id}] ✅ Stream opened successfully")
+                break
+
+            # Main capture loop
+            frame_timeout_count = 0
+            max_frame_timeout = 30  # Allow 30 consecutive failures before giving up
 
             while self.running:
                 ret, frame = self.cap.read()
 
                 if not ret:
-                    print(f"[CAM{self.camera_id}] Failed to read frame")
+                    frame_timeout_count += 1
+                    if frame_timeout_count >= max_frame_timeout:
+                        print(
+                            f"[CAM{self.camera_id}] ⚠️ Too many frame read failures, stopping"
+                        )
+                        self._show_placeholder()
+                        break
                     time.sleep(0.1)
                     continue
+
+                # Reset timeout counter on successful read
+                frame_timeout_count = 0
 
                 # Apply object detection if enabled
                 if self.detection_enabled and self.detector is not None:
@@ -112,11 +143,43 @@ class CameraWorker(QThread):
             error_msg = f"Camera {self.camera_id} error: {str(e)}"
             self.error_occurred.emit(error_msg)
             print(f"[CAM{self.camera_id}] ❌ {error_msg}")
+            self._show_placeholder()
 
         finally:
             if self.cap:
                 self.cap.release()
             print(f"[CAM{self.camera_id}] Stream closed")
+
+    def _show_placeholder(self):
+        """Show placeholder image when camera is unavailable."""
+        # Create a placeholder frame
+        placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # Add text
+        text = f"Camera {self.camera_id + 1} Unavailable"
+        cv2.putText(
+            placeholder,
+            text,
+            (100, 240),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            (100, 100, 100),
+            2,
+        )
+
+        cv2.putText(
+            placeholder,
+            "Check network connection",
+            (140, 280),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (80, 80, 80),
+            1,
+        )
+
+        # Emit placeholder
+        pixmap = self._frame_to_pixmap(placeholder)
+        self.frame_ready.emit(pixmap)
 
     def _apply_detection(self, frame):
         """Apply object detection to frame."""

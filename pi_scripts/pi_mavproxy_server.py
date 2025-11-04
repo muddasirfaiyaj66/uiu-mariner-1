@@ -1,125 +1,317 @@
 #!/usr/bin/env python3
 """
-MAVProxy Server for Raspberry Pi
-Provides socket interface to MAVProxy for remote control
-Based on tested code from Pi Codes/pixhawkserver.py
+MAVLink TCP Relay Server for Raspberry Pi
+Bidirectionally relays MAVLink messages between Pixhawk and Ground Station.
+This is a native MAVLink relay (not text-based MAVProxy commands).
 """
 
 import socket
-import subprocess
+import threading
+import time
 import sys
+import os
+from pathlib import Path
+from pymavlink import mavutil
 
 
-def start_mavproxy_server(
-    mavproxy_master="/dev/ttyACM0",
-    baudrate=115200,
-    server_host="0.0.0.0",
-    server_port=7000,
-):
-    """
-    Start MAVProxy and provide TCP socket interface.
+class MAVLinkTCPRelay:
+    """Relay MAVLink messages between serial Pixhawk and TCP clients."""
 
-    Args:
-        mavproxy_master: Serial device path for Pixhawk connection
-        baudrate: Serial baud rate
-        server_host: Server bind address
-        server_port: TCP port for client connections
-    """
-    print("=" * 60)
-    print("MAVPROXY SERVER - UIU MARINER")
-    print("=" * 60)
-    print(f"MAVLink: {mavproxy_master} @ {baudrate} baud")
-    print(f"Server: {server_host}:{server_port}")
-    print("=" * 60)
+    def __init__(
+        self, serial_port="/dev/ttyAMA0", baud=57600, tcp_host="0.0.0.0", tcp_port=7000
+    ):
+        self.serial_port = serial_port
+        self.baud = baud
+        self.tcp_host = tcp_host
+        self.tcp_port = tcp_port
 
-    # Start MAVProxy process
-    print("\n[MAVPROXY] Starting MAVProxy...")
-    mavproxy_cmd = [
-        "mavproxy.py",
-        f"--master={mavproxy_master}",
-        "--baudrate",
-        str(baudrate),
-    ]
+        self.pixhawk = None
+        self.server_socket = None
+        self.clients = []
+        self.clients_lock = threading.Lock()
+        self.running = True
 
-    mavproxy_process = subprocess.Popen(
-        mavproxy_cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-    )
+    def connect_pixhawk(self):
+        """Connect to Pixhawk via serial."""
+        print(f"\n[PIXHAWK] Connecting to {self.serial_port} @ {self.baud} baud...")
+        try:
+            self.pixhawk = mavutil.mavlink_connection(
+                self.serial_port,
+                baud=self.baud,
+                autoreconnect=True,
+            )
+            print(f"[✅] Pixhawk connected!")
+            return True
+        except Exception as e:
+            print(f"[❌] Failed to connect to Pixhawk: {e}")
+            return False
 
-    print("[MAVPROXY] ✅ MAVProxy started")
+    def start_tcp_server(self):
+        """Start TCP server for Ground Station connections."""
+        print(f"\n[SERVER] Starting TCP server on {self.tcp_host}:{self.tcp_port}...")
+        try:
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_socket.bind((self.tcp_host, self.tcp_port))
+            self.server_socket.listen(5)
+            print(f"[✅] TCP server listening on {self.tcp_host}:{self.tcp_port}")
 
-    # Create TCP server socket
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((server_host, server_port))
-    server_socket.listen(5)
+            # Start accepting connections in a thread
+            threading.Thread(target=self._accept_connections, daemon=True).start()
 
-    print(f"\n[SERVER] 🚀 Listening on {server_host}:{server_port}")
-    print("[SERVER] Waiting for Ground Station connection...")
+        except Exception as e:
+            print(f"[❌] Failed to start TCP server: {e}")
+            return False
 
-    try:
-        while True:
-            conn, addr = server_socket.accept()
-            print(f"\n[SERVER] ✅ Connected to {addr}")
+        return True
 
+    def _accept_connections(self):
+        """Accept incoming TCP connections."""
+        while self.running:
             try:
-                while True:
-                    data = conn.recv(1024)
-                    if not data:
-                        print("[SERVER] ⚠️ Connection closed by client")
-                        break
+                conn, addr = self.server_socket.accept()
+                print(f"[CLIENT] ✅ Connected from {addr}")
 
-                    command = data.decode().strip()
-                    print(f"[COMMAND] Received: {command}")
+                with self.clients_lock:
+                    self.clients.append(conn)
 
-                    # Forward command to MAVProxy
-                    try:
-                        mavproxy_process.stdin.write(command + "\n")
-                        mavproxy_process.stdin.flush()
-                        print(f"[COMMAND] ✅ Sent to MAVProxy")
-                    except Exception as e:
-                        print(f"[COMMAND] ❌ Error forwarding: {e}")
+                # Handle client in a separate thread
+                threading.Thread(
+                    target=self._handle_client_messages, args=(conn, addr), daemon=True
+                ).start()
 
             except Exception as e:
-                print(f"[SERVER] ❌ Connection error: {e}")
-            finally:
-                conn.close()
-                print("[SERVER] Connection closed, waiting for new connection...")
+                if self.running:
+                    print(f"[SERVER] ⚠️ Accept error: {e}")
+                break
 
-    except KeyboardInterrupt:
-        print("\n\n[SERVER] Shutting down...")
-    finally:
-        server_socket.close()
-        mavproxy_process.terminate()
-        mavproxy_process.wait()
-        print("[SERVER] Server stopped")
+    def _handle_client_messages(self, conn, addr):
+        """Handle incoming MAVLink messages from a client."""
+        try:
+            conn.settimeout(30)  # 30 second timeout
+
+            while self.running:
+                try:
+                    # Receive MAVLink message from client
+                    data = conn.recv(1024)
+
+                    if not data:
+                        print(f"[CLIENT] Connection closed by {addr}")
+                        break
+
+                    # Forward to Pixhawk
+                    if self.pixhawk:
+                        try:
+                            self.pixhawk.write(data)
+                        except Exception as e:
+                            print(f"[FORWARD] ⚠️ Error forwarding to Pixhawk: {e}")
+
+                except socket.timeout:
+                    # Timeout is OK, just continue
+                    pass
+                except Exception as e:
+                    print(f"[CLIENT] ⚠️ Error handling client: {e}")
+                    break
+
+        finally:
+            with self.clients_lock:
+                if conn in self.clients:
+                    self.clients.remove(conn)
+            conn.close()
+            print(f"[CLIENT] Disconnected: {addr}")
+
+    def relay_pixhawk_to_clients(self):
+        """Continuously read from Pixhawk and relay to all clients."""
+        print("\n[RELAY] Starting bidirectional relay...")
+
+        while self.running:
+            try:
+                if not self.pixhawk:
+                    time.sleep(0.1)
+                    continue
+
+                # Read MAVLink message from Pixhawk (non-blocking)
+                msg = self.pixhawk.recv_match(blocking=False, timeout=0)
+
+                if msg:
+                    # Get the raw message buffer - pymavlink stores it in the message object
+                    try:
+                        # The raw buffer is available directly from read_dict or msg_buf
+                        # We'll re-encode the message properly
+                        if hasattr(msg, "get_msgbuf"):
+                            msg_bytes = msg.get_msgbuf()
+                        elif hasattr(self.pixhawk, "msg_buf"):
+                            msg_bytes = self.pixhawk.msg_buf
+                        else:
+                            # Fallback: re-pack the message
+                            msg_bytes = self.pixhawk.mav.encode(msg)
+
+                        if not msg_bytes:
+                            msg_bytes = None
+
+                        # Send to all connected clients
+                        with self.clients_lock:
+                            dead_clients = []
+                            for client in self.clients:
+                                try:
+                                    if msg_bytes:
+                                        client.sendall(msg_bytes)
+                                except Exception as e:
+                                    print(f"[RELAY] ⚠️ Error sending to client: {e}")
+                                    dead_clients.append(client)
+
+                            # Remove dead clients
+                            for client in dead_clients:
+                                self.clients.remove(client)
+                                try:
+                                    client.close()
+                                except:
+                                    pass
+
+                        # Log heartbeats periodically
+                        if msg.get_type() == "HEARTBEAT":
+                            if not hasattr(self, "_last_hb_log"):
+                                self._last_hb_log = 0
+                            if time.time() - self._last_hb_log > 5:
+                                print(
+                                    f"[RELAY] ❤️ Heartbeat from Pixhawk → {len(self.clients)} clients"
+                                )
+                                self._last_hb_log = time.time()
+
+                    except Exception as e:
+                        print(f"[RELAY] ⚠️ Error encoding message: {e}")
+                else:
+                    time.sleep(0.01)  # Small delay to prevent CPU spinning
+
+            except Exception as e:
+                print(f"[RELAY] ⚠️ Relay error: {e}")
+                time.sleep(0.1)
+
+    def run(self):
+        """Main server loop."""
+        print("=" * 60)
+        print("MAVLink TCP RELAY SERVER - UIU MARINER")
+        print("=" * 60)
+        print(f"Serial: {self.serial_port} @ {self.baud} baud")
+        print(f"TCP: {self.tcp_host}:{self.tcp_port}")
+        print("=" * 60)
+
+        try:
+            # Connect to Pixhawk
+            if not self.connect_pixhawk():
+                print("[❌] Failed to connect to Pixhawk")
+                return False
+
+            # Start TCP server
+            if not self.start_tcp_server():
+                print("[❌] Failed to start TCP server")
+                return False
+
+            # Start relay loop (blocks)
+            self.relay_pixhawk_to_clients()
+
+        except KeyboardInterrupt:
+            print("\n\n[SERVER] Shutting down...")
+        except Exception as e:
+            print(f"\n[❌] Fatal error: {e}")
+            return False
+        finally:
+            self.shutdown()
+
+        return True
+
+    def shutdown(self):
+        """Clean shutdown."""
+        self.running = False
+
+        if self.server_socket:
+            try:
+                self.server_socket.close()
+            except:
+                pass
+
+        with self.clients_lock:
+            for client in self.clients:
+                try:
+                    client.close()
+                except:
+                    pass
+            self.clients.clear()
+
+        if self.pixhawk:
+            try:
+                self.pixhawk.close()
+            except:
+                pass
+
+        print("[SERVER] Shutdown complete")
+
+
+def check_prerequisites(serial_port):
+    """Run pre-flight checks before starting."""
+    print("\n" + "=" * 60)
+    print("PRE-RUN CHECKS")
+    print("=" * 60)
+
+    # Check 1: Serial device exists
+    print(f"\n[CHECK] Serial device: {serial_port}")
+    if Path(serial_port).exists():
+        print(f"[✅] Device {serial_port} found")
+    else:
+        print(f"[⚠️] Warning: Device {serial_port} not detected")
+        print("     (May appear when Pixhawk boots up)")
+
+    # Check 2: Port availability
+    print("\n[CHECK] Port availability...")
+    test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        test_socket.bind(("0.0.0.0", 7000))
+        print("[✅] Port 7000 is available")
+        test_socket.close()
+    except OSError as e:
+        print(f"[❌] Port 7000 already in use: {e}")
+        test_socket.close()
+        return False
+
+    # Check 3: Network connectivity
+    print("\n[CHECK] Network interface...")
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        print(f"[✅] Hostname: {hostname}")
+        print(f"[✅] Local IP: {local_ip}")
+    except Exception as e:
+        print(f"[⚠️] Could not resolve network: {e}")
+
+    print("\n" + "=" * 60)
+    print("PRE-RUN CHECKS COMPLETE")
+    print("=" * 60 + "\n")
+
+    return True
 
 
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="MAVProxy TCP Server for ROV")
+    parser = argparse.ArgumentParser(description="MAVLink TCP Relay Server for ROV")
     parser.add_argument(
         "--master",
         type=str,
-        default="/dev/ttyACM0",
-        help="MAVLink serial device (default: /dev/ttyACM0)",
+        default="/dev/ttyAMA0",
+        help="Serial device for Pixhawk (default: /dev/ttyAMA0)",
     )
     parser.add_argument(
         "--baudrate",
         type=int,
-        default=115200,
-        help="Serial baud rate (default: 115200)",
+        default=57600,
+        help="Serial baud rate (default: 57600)",
     )
     parser.add_argument(
         "--host",
         type=str,
         default="0.0.0.0",
-        help="Server bind address (default: 0.0.0.0)",
+        help="TCP server bind address (default: 0.0.0.0)",
     )
     parser.add_argument(
         "--port", type=int, default=7000, help="TCP server port (default: 7000)"
@@ -128,12 +320,21 @@ def main():
     args = parser.parse_args()
 
     try:
-        start_mavproxy_server(
-            mavproxy_master=args.master,
-            baudrate=args.baudrate,
-            server_host=args.host,
-            server_port=args.port,
+        # Run pre-flight checks
+        if not check_prerequisites(args.master):
+            print("\n[⚠️] Some checks failed. Continuing anyway...")
+
+        # Start relay server
+        relay = MAVLinkTCPRelay(
+            serial_port=args.master,
+            baud=args.baudrate,
+            tcp_host=args.host,
+            tcp_port=args.port,
         )
+
+        success = relay.run()
+        sys.exit(0 if success else 1)
+
     except Exception as e:
         print(f"\n❌ Fatal error: {e}")
         sys.exit(1)
