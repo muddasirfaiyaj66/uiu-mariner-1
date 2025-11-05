@@ -36,13 +36,13 @@ echo ""
 
 # Check Pixhawk connection
 echo "3️⃣  Checking Pixhawk connection..."
-echo "   Expected: /dev/ttyACM0 at 115200 baud"
+echo "   Expected: /dev/ttyAMA0 at 57600 baud"
 echo ""
 
-if [ -e "/dev/ttyACM0" ]; then
-    echo "   ✅ Pixhawk found at /dev/ttyACM0"
+if [ -e "/dev/ttyAMA0" ]; then
+    echo "   ✅ Pixhawk found at /dev/ttyAMA0"
 else
-    echo "   ⚠️  /dev/ttyACM0 not found"
+    echo "   ⚠️  /dev/ttyAMA0 not found"
     echo "   💡 Run: python3 detect_pixhawk.py to find it"
 fi
 echo ""
@@ -111,7 +111,7 @@ Wants=network.target
 Type=simple
 User=\$ACTUAL_USER
 WorkingDirectory=\$SCRIPT_DIR
-ExecStart=/usr/bin/python3 \$SCRIPT_DIR/pi_mavproxy_server.py --master /dev/ttyACM0 --baudrate 115200 --port 7000
+ExecStart=/usr/bin/python3 \$SCRIPT_DIR/pi_mavproxy_server.py --master /dev/ttyAMA0 --baudrate 57600 --port 7000
 Restart=always
 RestartSec=5
 

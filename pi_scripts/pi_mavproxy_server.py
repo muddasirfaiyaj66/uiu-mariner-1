@@ -3,6 +3,16 @@
 MAVLink TCP Relay Server for Raspberry Pi
 Bidirectionally relays MAVLink messages between Pixhawk and Ground Station.
 This is a native MAVLink relay (not text-based MAVProxy commands).
+
+Connection Types Supported:
+  - GPIO UART (/dev/ttyAMA0): Pixhawk connected via RX/TX/GND pins
+  - USB Serial (/dev/ttyUSB0): Pixhawk connected via USB
+  - USB CDC (/dev/ttyACM0): Pixhawk USB connection alternative
+
+Default Configuration:
+  Serial Port: /dev/ttyAMA0 (Raspberry Pi GPIO UART pins)
+  Baud Rate: 57600 (standard for Pixhawk on GPIO UART)
+  TCP Port: 7000 (for Ground Station connections)
 """
 
 import socket
@@ -20,6 +30,19 @@ class MAVLinkTCPRelay:
     def __init__(
         self, serial_port="/dev/ttyAMA0", baud=57600, tcp_host="0.0.0.0", tcp_port=7000
     ):
+        """
+        Initialize MAVLink TCP relay server.
+
+        Args:
+            serial_port: Path to Pixhawk serial port
+                - "/dev/ttyAMA0": Raspberry Pi GPIO UART (RX/TX/GND pins)
+                - "/dev/serial0": Raspberry Pi primary serial alias
+                - "/dev/ttyUSB0": USB serial adapter
+                - "/dev/ttyACM0": USB CDC device
+            baud: Serial baud rate (57600 recommended for GPIO UART)
+            tcp_host: TCP server bind address (0.0.0.0 = all interfaces)
+            tcp_port: TCP server port (default 7000)
+        """
         self.serial_port = serial_port
         self.baud = baud
         self.tcp_host = tcp_host
@@ -32,7 +55,17 @@ class MAVLinkTCPRelay:
         self.running = True
 
     def connect_pixhawk(self):
-        """Connect to Pixhawk via serial."""
+        """
+        Connect to Pixhawk via serial port.
+
+        For GPIO UART connections on Raspberry Pi:
+          - Use /dev/ttyAMA0 (RX on GPIO 15, TX on GPIO 14)
+          - Use baud rate 57600 (or 115200 if configured in ArduSub)
+          - Ensure GPIO pins are not in use by other services (disable serial console)
+
+        Returns:
+            True if connection successful, False otherwise
+        """
         print(f"\n[PIXHAWK] Connecting to {self.serial_port} @ {self.baud} baud...")
         try:
             self.pixhawk = mavutil.mavlink_connection(
@@ -40,7 +73,7 @@ class MAVLinkTCPRelay:
                 baud=self.baud,
                 autoreconnect=True,
             )
-            print(f"[✅] Pixhawk connected!")
+            print(f"[✅] Pixhawk connected on {self.serial_port}!")
             return True
         except Exception as e:
             print(f"[❌] Failed to connect to Pixhawk: {e}")

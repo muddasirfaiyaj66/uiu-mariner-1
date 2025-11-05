@@ -36,10 +36,10 @@ echo "2️⃣  Starting MAVProxy Server (Pixhawk)..."
 if screen -list | grep -q "mavproxy"; then
     echo "   ⚠️  MAVProxy already running"
 else
-    screen -dmS mavproxy python3 "$SCRIPT_DIR/pi_mavproxy_server.py" --master /dev/ttyACM0 --baudrate 115200 --port 7000
+    screen -dmS mavproxy python3 "$SCRIPT_DIR/pi_mavproxy_server.py" --master /dev/ttyAMA0 --baudrate 57600 --port 7000
     sleep 1
     if screen -list | grep -q "mavproxy"; then
-        echo "   ✅ MAVProxy started (Port: /dev/ttyACM0, Baud: 115200)"
+        echo "   ✅ MAVProxy started (Port: /dev/ttyAMA0, Baud: 57600)"
     else
         echo "   ❌ Failed to start MAVProxy"
     fi

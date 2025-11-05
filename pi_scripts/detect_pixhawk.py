@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 """
 Pixhawk Detection Script for Raspberry Pi
-Scans all serial ports and baud rates to find Pixhawk connection
+Scans serial ports and baud rates to find Pixhawk connection.
+
+Supports both GPIO UART and USB connections:
+  - GPIO UART (/dev/ttyAMA0): Pixhawk connected to RX/TX/GND pins
+  - USB Serial (/dev/ttyUSB0): Pixhawk connected via USB adapter
+  - USB CDC (/dev/ttyACM0): Pixhawk USB connection alternative
+
+Priority Order:
+  1. GPIO UART (/dev/ttyAMA0, /dev/serial0) at 57600 baud
+  2. USB Serial (/dev/ttyUSB*, /dev/ttyACM*) at 115200 baud
+  3. Fallback to other baud rates
 """
 
 from pymavlink import mavutil
 import time
 import sys
 
-# Common serial ports on Raspberry Pi
+# Serial ports in priority order (GPIO UART first)
 serial_ports = [
-    "/dev/ttyAMA0",  # Primary UART (GPIO 14/15)
+    "/dev/ttyAMA0",  # Raspberry Pi GPIO UART (primary) - RX/TX/GND pins
     "/dev/serial0",  # Alias to primary UART
     "/dev/ttyUSB0",  # USB serial adapter
     "/dev/ttyUSB1",  # Additional USB
@@ -19,14 +29,15 @@ serial_ports = [
     "/dev/ttyS0",  # Another serial port option
 ]
 
-# Common baud rates for Pixhawk
-baud_rates = [115200, 57600, 38400, 19200, 9600]
+# Baud rates in priority order (GPIO UART standard first)
+baud_rates = [57600, 115200, 38400, 19200, 9600]
 
 print("=" * 60)
 print("🔍 PIXHAWK DETECTION SCRIPT")
 print("=" * 60)
 print()
 print("Scanning serial ports for Pixhawk/MAVLink device...")
+print("Checking GPIO UART first, then USB connections...")
 print()
 
 
@@ -97,17 +108,25 @@ if not found:
     print("=" * 60)
     print()
     print("🔧 Troubleshooting:")
-    print("   1. Check physical connection (USB or UART)")
-    print("   2. Verify Pixhawk is powered on")
-    print("   3. Check cable is data-capable (not charge-only)")
-    print("   4. Enable UART in raspi-config:")
+    print()
+    print("FOR GPIO UART CONNECTIONS (/dev/ttyAMA0):")
+    print("   1. Check physical connection (RX/TX/GND pins)")
+    print("   2. Verify UART is enabled in raspi-config:")
     print("      sudo raspi-config → Interface Options → Serial Port")
-    print("      - Login shell over serial: NO")
-    print("      - Serial hardware enabled: YES")
-    print("   5. Check device permissions:")
-    print("      ls -l /dev/tty*")
+    print("      - Enable serial port hardware: YES")
+    print("      - Disable login shell over serial: YES")
+    print("   3. Disable serial console if enabled:")
+    print("      sudo systemctl disable serial-getty@ttyAMA0.service")
+    print("   4. Verify device permissions:")
+    print("      ls -l /dev/ttyAMA0")
     print("      sudo usermod -a -G dialout $USER")
-    print("   6. Try different USB port")
+    print()
+    print("FOR ALL CONNECTIONS:")
+    print("   1. Verify Pixhawk is powered on (LED should blink)")
+    print("   2. Check cable is data-capable (not charge-only)")
+    print("   3. Try different USB port (if USB connection)")
+    print("   4. Check ArduSub firmware is installed on Pixhawk")
+    print("   5. Reset Pixhawk (power cycle or press reset button)")
     print()
     print("📋 Available serial devices:")
     import subprocess
