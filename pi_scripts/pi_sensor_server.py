@@ -12,7 +12,7 @@ import sys
 
 
 # I2C Configuration
-I2C_BUS = 0  # I2C bus number
+I2C_BUS = 1  # I2C bus number (1 is standard on Raspberry Pi)
 BMP388_ADDR = 0x77  # BMP388 I2C address
 
 # BMP388 Registers

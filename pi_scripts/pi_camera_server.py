@@ -14,7 +14,7 @@ def start_camera_stream(
     camera_id, dest_ip, port, payload=96, width=640, height=480, framerate=30
 ):
     """
-    Start streaming from a Raspberry Pi camera using libcamera and GStreamer.
+    Start streaming from a Raspberry Pi camera using rpicam (libcamera) and GStreamer.
 
     Args:
         camera_id: Camera index (0 or 1)
@@ -30,7 +30,7 @@ def start_camera_stream(
     print(f"  Payload: {payload}")
 
     command = f"""
-    libcamera-vid --camera {camera_id} -t 0 --inline -n \
+    rpicam-vid --camera {camera_id} -t 0 --inline -n \
     --width {width} --height {height} --framerate {framerate} \
     --codec h264 --libav-format h264 -o - | \
     gst-launch-1.0 fdsrc ! h264parse ! rtph264pay config-interval=1 pt={payload} ! \

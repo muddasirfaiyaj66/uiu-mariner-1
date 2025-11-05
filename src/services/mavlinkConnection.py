@@ -159,8 +159,18 @@ class PixhawkConnection:
         try:
             print(f"[CONNECT] Attempting to connect → {self.link}")
 
+            # Parse connection string to extract baud rate for serial connections
+            device, baud = self._parse_connection_string(self.link)
+
             # Create MAVLink connection with autoreconnect enabled
-            self.vehicle = mavutil.mavlink_connection(self.link, autoreconnect=True)
+            if baud:
+                # Serial connection with explicit baud rate
+                self.vehicle = mavutil.mavlink_connection(
+                    device, baud=baud, autoreconnect=True
+                )
+            else:
+                # TCP/UDP connection (baud not needed)
+                self.vehicle = mavutil.mavlink_connection(device, autoreconnect=True)
 
             # Wait for heartbeat message to confirm connection
             print(f"[CONNECT] Waiting for heartbeat...")
@@ -180,6 +190,37 @@ class PixhawkConnection:
         except Exception as e:
             print(f"[❌] MAVLink connection error: {e}")
             return False
+
+    def _parse_connection_string(self, link: str):
+        """
+        Parse connection string to extract device and baud rate.
+
+        For serial connections like "/dev/ttyAMA0:57600", this splits
+        the string into device path and baud rate.
+
+        Args:
+            link (str): Connection string (e.g., "/dev/ttyAMA0:57600" or "tcp:192.168.1.1:7000")
+
+        Returns:
+            tuple: (device, baud_rate) where baud_rate is None for TCP/UDP connections
+        """
+        # Check if this is a TCP/UDP connection
+        if link.startswith("tcp:") or link.startswith("udp:"):
+            return link, None
+
+        # Check if this is a serial connection with baud rate
+        if ":" in link and not link.startswith("tcp:") and not link.startswith("udp:"):
+            parts = link.split(":")
+            device = parts[0]
+            try:
+                baud = int(parts[1])
+                return device, baud
+            except (ValueError, IndexError):
+                # Invalid baud rate, return as-is
+                return link, None
+
+        # No baud rate specified
+        return link, None
 
     def _retry_with_port_detection(self):
         """
@@ -688,7 +729,16 @@ class PixhawkConnection:
             # Recreate MAVLink connection if needed
             if not self.vehicle:
                 print(f"[CONNECT] Attempting to connect → {self.link}")
-                self.vehicle = mavutil.mavlink_connection(self.link, autoreconnect=True)
+                # Parse connection string to handle serial baud rates correctly
+                device, baud = self._parse_connection_string(self.link)
+                if baud:
+                    self.vehicle = mavutil.mavlink_connection(
+                        device, baud=baud, autoreconnect=True
+                    )
+                else:
+                    self.vehicle = mavutil.mavlink_connection(
+                        device, autoreconnect=True
+                    )
 
             # Check for heartbeat to confirm reconnection
             msg = self.vehicle.recv_match(type="HEARTBEAT", blocking=True, timeout=3)
