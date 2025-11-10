@@ -44,6 +44,8 @@ cd ~
 bash pi_scripts/pi_autostart_all.sh stop
 ```
 
+ssh pi@raspberrypi.local "bash /home/pi/mariner/pi_scripts/pi_autostart_all.sh start"
+
 **View logs:**
 
 ```bash

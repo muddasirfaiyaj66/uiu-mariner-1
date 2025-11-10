@@ -29,6 +29,19 @@ PWM_MAX = 2000  # Maximum PWM value (full forward)
 # Calibration timing
 CALIBRATION_DELAY = 1.5  # Time to wait before joystick is ready (seconds)
 
+# Channel mapping (indices 0..7 correspond to RC channels 1..8)
+# Update these values to remap which RC channel each logical thruster uses.
+CHANNEL_MAP = {
+    "forward_a": 0,  # Channel 1 (index 0)
+    "yaw_a": 1,      # Channel 2 (index 1)
+    "vert_a": 2,     # Channel 3 (index 2)
+    "vert_b": 3,     # Channel 4 (index 3)
+    "yaw_b": 4,      # Channel 5 (index 4)
+    "vert_c": 5,     # Channel 6 (index 5)
+    "vert_d": 6,     # Channel 7 (index 6)
+    "forward_b": 7,  # Channel 8 (index 7)
+}
+
 
 class JoystickController:
     """
@@ -505,8 +518,9 @@ class JoystickController:
         if abs(forward_back) > DEADZONE:
             value = self.axis_to_pwm(forward_back)
             reverse_value = self.axis_to_pwm(-forward_back)
-            channels[0] = value  # Ch1: ACW for forward
-            channels[7] = reverse_value  # Ch8: CW for forward
+            # Use CHANNEL_MAP to determine which indices correspond to forward thrusters
+            channels[CHANNEL_MAP["forward_a"]] = value
+            channels[CHANNEL_MAP["forward_b"]] = reverse_value
 
             # Log with rate limiting to avoid console spam
             if time.time() - self._last_thruster_log_time > 0.5:
@@ -531,8 +545,9 @@ class JoystickController:
         if abs(left_right) > DEADZONE:
             value = self.axis_to_pwm(left_right)
             value2 = self.axis_to_pwm(-left_right)
-            channels[1] = value  # Ch2
-            channels[4] = value2  # Ch5
+            # Map yaw/rotation channels via CHANNEL_MAP
+            channels[CHANNEL_MAP["yaw_a"]] = value
+            channels[CHANNEL_MAP["yaw_b"]] = value2
 
             # Log with rate limiting
             if time.time() - self._last_thruster_log_time > 0.5:
@@ -558,10 +573,11 @@ class JoystickController:
         if abs(up_down) > DEADZONE:
             value = self.axis_to_pwm(up_down)
             value2 = self.axis_to_pwm(-up_down)
-            channels[2] = value2  # Ch3: ACW
-            channels[3] = value2  # Ch4: ACW
-            channels[5] = value  # Ch6: CW
-            channels[6] = value  # Ch7: CW
+            # Map vertical thrusters via CHANNEL_MAP
+            channels[CHANNEL_MAP["vert_a"]] = value2
+            channels[CHANNEL_MAP["vert_b"]] = value2
+            channels[CHANNEL_MAP["vert_c"]] = value
+            channels[CHANNEL_MAP["vert_d"]] = value
 
             # Log with rate limiting
             if time.time() - self._last_thruster_log_time > 0.5:
