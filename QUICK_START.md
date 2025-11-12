@@ -1,22 +1,80 @@
+<!-- dos2unix start_all_services.sh  -->
+<!-- dos2unix stop_all_services.sh  -->
+
 # Mariner ROV - Quick Start Guide
 
-## On Raspberry Pi (One Time Setup)
+## Ethernet Setup (for Underwater Tether)
+
+**Configure static IP on Raspberry Pi for Ethernet connection:**
 
 ```bash
-# 1. Copy only pi_scripts to Pi
-scp -r /path/to/uiu-mariner-1/pi_scripts pi@raspberrypi.local:~/
+# On Raspberry Pi (using NetworkManager)
+sudo nmcli connection modify "Wired connection 1" ipv4.addresses 192.168.1.100/24
+sudo nmcli connection modify "Wired connection 1" ipv4.gateway 192.168.1.1
+sudo nmcli connection modify "Wired connection 1" ipv4.dns "8.8.8.8"
+sudo nmcli connection modify "Wired connection 1" ipv4.method manual
 
-# 2. SSH into Pi
+# Apply changes
+sudo nmcli connection down "Wired connection 1"
+sudo nmcli connection up "Wired connection 1"
+
+# Verify
+ifconfig eth0
+# Should show: inet 192.168.1.100
+```
+
+**Configure static IP on Ground Station PC:**
+
+Windows:
+
+1. Control Panel → Network Connections → Ethernet adapter
+2. Right-click → Properties → IPv4
+3. Use this IP address:
+   - IP: `192.168.1.10`
+   - Subnet: `255.255.255.0`
+   - Gateway: `192.168.1.1`
+
+**Test connection:**
+
+```bash
+ping 192.168.1.100
+```
+
+## Deploy to Raspberry Pi
+
+**One command to sync everything:**
+
+```powershell
+# On Windows
+.\deploy_to_pi.ps1
+```
+
+Or with custom Pi address (Ethernet):
+
+```powershell
+.\deploy_to_pi.ps1 -PiHost 192.168.1.100
+```
+
+**Note:** If using Ethernet tether, make sure both Pi and Ground Station have static IPs configured first (see Ethernet Setup above).
+
+This will automatically:
+
+- Sync all pi_scripts to Pi
+- Create necessary directories
+- Make scripts executable
+
+## First Time Setup on Pi
+
+After deployment, SSH into Pi and install dependencies:
+
+```bash
 ssh pi@raspberrypi.local
 
-# 3. Install dependencies
-pip install pymavlink pyserial
+# Install Python dependencies
+pip3 install pymavlink pyserial flask picamera2 opencv-python-headless numpy
 
-# 4. Make scripts executable
-chmod +x ~/pi_scripts/pi_autostart_all.sh
-
-# 5. Setup systemd (optional - for autostart on boot)
-sudo cp ~/pi_scripts/mariner_autostart.service /etc/systemd/system/
+# Optional: Setup autostart on boot
+sudo cp ~/mariner/pi_scripts/mariner_autostart.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable mariner_autostart.service
 ```
@@ -26,32 +84,40 @@ sudo systemctl enable mariner_autostart.service
 **Start all services:**
 
 ```bash
-cd ~
-bash pi_scripts/pi_autostart_all.sh start
+cd ~/mariner/pi_scripts
+./start_all_services.sh
 ```
 
-**Check status:**
+**Or start individual services:**
 
 ```bash
-cd ~
-bash pi_scripts/pi_autostart_all.sh status
+# Cameras only
+./start_cameras.sh
+
+# Check what's running
+screen -ls
+```
+
+**View logs:**
+
+```bash
+# View camera logs
+screen -r cam0
+screen -r cam1
+
+# View other services
+screen -r sensors
+screen -r mavproxy
+
+# Detach from screen: Ctrl+A then D
 ```
 
 **Stop all services:**
 
 ```bash
-cd ~
-bash pi_scripts/pi_autostart_all.sh stop
-```
-
-ssh pi@raspberrypi.local "bash /home/pi/mariner/pi_scripts/pi_autostart_all.sh start"
-
-**View logs:**
-
-```bash
-tail -f ~/logs/sensor_server.log
-tail -f ~/logs/camera_server.log
-tail -f ~/logs/mavproxy_relay.log
+pkill -f pi_camera_server
+pkill -f pi_sensor_server
+pkill -f pi_mavproxy_server
 ```
 
 ## On Ground Station (Windows/Mac)
@@ -81,6 +147,17 @@ python launch_mariner.py
 
 - **MAVLink TCP**: 7000 (Ground Station ↔ Pi)
 - **Sensor TCP**: 5002 (BMP388 telemetry)
-- **Camera UDP**: 5000, 5001 (H.264 video streams)
+- **Camera HTTP**: 8080, 8081 (MJPEG video streams via Flask)
+  - Camera 0: http://raspberrypi.local:8080/video_feed
+  - Camera 1: http://raspberrypi.local:8081/video_feed
 
-Done! System ready to test. 🚀
+## Camera System
+
+Uses **Flask + Picamera2** for MJPEG streaming over HTTP:
+
+- Camera 0: http://raspberrypi.local:8080/video_feed
+- Camera 1: http://raspberrypi.local:8081/video_feed
+
+Test in any web browser!
+
+Done! 🚀

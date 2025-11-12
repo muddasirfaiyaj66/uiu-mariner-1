@@ -94,8 +94,8 @@ class MarinerROVControl(QMainWindow):
             "mavlink_connection": "tcp:raspberrypi.local:7000",
             "joystick_target": None,
             "camera": {
-                "pipeline0": "udpsrc port=5000 ! application/x-rtp,encoding-name=H264,payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink",
-                "pipeline1": "udpsrc port=5001 ! application/x-rtp,encoding-name=H264,payload=97 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink",
+                "stream_url0": "http://raspberrypi.local:8080/video_feed",
+                "stream_url1": "http://raspberrypi.local:8081/video_feed",
             },
             "sensors": {
                 "host": "raspberrypi.local",
@@ -1032,12 +1032,20 @@ class MarinerROVControl(QMainWindow):
             pass
 
     def start_camera_feeds(self):
-        """Start dual camera feeds with object detection."""
+        """Start dual camera feeds with object detection via MJPEG streams."""
         try:
-            pipeline0 = self.config["camera"]["pipeline0"]
-            pipeline1 = self.config["camera"]["pipeline1"]
+            # Get MJPEG stream URLs from config
+            stream_url0 = self.config["camera"].get(
+                "stream_url0", "http://raspberrypi.local:8080/video_feed"
+            )
+            stream_url1 = self.config["camera"].get(
+                "stream_url1", "http://raspberrypi.local:8081/video_feed"
+            )
 
-            self.camera_manager = DualCameraManager(pipeline0, pipeline1)
+            print(f"[CAMERAS] Camera 0 URL: {stream_url0}")
+            print(f"[CAMERAS] Camera 1 URL: {stream_url1}")
+
+            self.camera_manager = DualCameraManager(stream_url0, stream_url1)
 
             # Connect camera 0 to small display
             self.camera_manager.camera0.frame_ready.connect(self.update_camera_small)
@@ -1048,7 +1056,7 @@ class MarinerROVControl(QMainWindow):
             self.camera_manager.camera1.error_occurred.connect(self.handle_camera_error)
 
             self.camera_manager.start_all()
-            print("[CAMERAS] [OK] Dual camera feeds started")
+            print("[CAMERAS] [OK] Dual MJPEG camera feeds started")
         except Exception as e:
             print(f"[CAMERAS] [ERR] Failed to start: {e}")
 

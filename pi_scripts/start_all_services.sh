@@ -45,31 +45,31 @@ else
     fi
 fi
 
-# Start Camera 0
+# Start Camera 0 (MJPEG HTTP Server)
 echo ""
-echo "3️⃣  Starting Camera 0 Stream..."
+echo "3️⃣  Starting Camera 0 MJPEG Server..."
 if screen -list | grep -q "cam0"; then
     echo "   ⚠️  Camera 0 already running"
 else
-    screen -dmS cam0 bash -c "cd $SCRIPT_DIR && ./cam0.sh $GROUND_STATION_IP"
+    screen -dmS cam0 python3 "$SCRIPT_DIR/pi_camera_server.py" 0 8080
     sleep 1
     if screen -list | grep -q "cam0"; then
-        echo "   ✅ Camera 0 started (streaming to $GROUND_STATION_IP:5000)"
+        echo "   ✅ Camera 0 started (HTTP port 8080)"
     else
         echo "   ❌ Failed to start camera 0"
     fi
 fi
 
-# Start Camera 1
+# Start Camera 1 (MJPEG HTTP Server)
 echo ""
-echo "4️⃣  Starting Camera 1 Stream..."
+echo "4️⃣  Starting Camera 1 MJPEG Server..."
 if screen -list | grep -q "cam1"; then
     echo "   ⚠️  Camera 1 already running"
 else
-    screen -dmS cam1 bash -c "cd $SCRIPT_DIR && ./cam1.sh $GROUND_STATION_IP"
+    screen -dmS cam1 python3 "$SCRIPT_DIR/pi_camera_server.py" 1 8081
     sleep 1
     if screen -list | grep -q "cam1"; then
-        echo "   ✅ Camera 1 started (streaming to $GROUND_STATION_IP:5001)"
+        echo "   ✅ Camera 1 started (HTTP port 8081)"
     else
         echo "   ❌ Failed to start camera 1"
     fi
@@ -94,4 +94,8 @@ echo "   View camera 1 logs:   screen -r cam1"
 echo "   Detach from screen:   Ctrl+A then D"
 echo "   Stop all services:    ./stop_all_services.sh"
 echo ""
-echo "🎉 Ready for ROV operations!"
+echo "� Camera Streams:"
+echo "   Camera 0: http://$(hostname -I | awk '{print $1}'):8080/video_feed"
+echo "   Camera 1: http://$(hostname -I | awk '{print $1}'):8081/video_feed"
+echo ""
+echo "�🎉 Ready for ROV operations!"

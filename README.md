@@ -58,7 +58,7 @@ Pixhawk Flight Controller         │ 192.168.0.104:14550
 
 - **Live Telemetry**: Altitude, depth, heading, battery status└────────┬────────┘
 
-- **Dual Camera Feeds**: GStreamer-based H.264 video streaming         │ PWM Signals
+- **Dual Camera Feeds**: MJPEG HTTP streaming with Flask + Picamera2         │ PWM Signals
 
 - **Professional MVC Architecture**: Clean separation of concerns┌────────▼────────┐
 
@@ -86,7 +86,7 @@ Pixhawk Flight Controller         │ 192.168.0.104:14550
 
 - **Virtual Environment** (recommended)- **Pixhawk** running ArduSub firmware (v4.5.6 or later)
 
-- **GStreamer** (for camera feeds)- **Network connection** to Pixhawk/Raspberry Pi
+- **Network connection** to Pixhawk/Raspberry Pi (camera streams work via HTTP)
 
 
 
@@ -386,11 +386,15 @@ The ROV's Raspberry Pi must run:- Check firewall settings (allow UDP port 14550)
 
 - Check ArduSub pre-arm checks in QGroundControl
 
-2. **Camera Server** (`pi_scripts/pi_camera_server.py`)- Verify ArduSub firmware version (4.5.6+)
+2. **Camera Server** (`pi_scripts/pi_camera_server.py`) - **NEW MJPEG Implementation!**
 
-   - Streams H.264 video via UDP
+   - Flask + Picamera2 based HTTP streaming
+   - Simple, reliable, browser-testable
+   - Streams MJPEG video via HTTP (ports 8080, 8081)
+   - Separate instances for each camera
+   - See `pi_scripts/CAMERA_README.md` for details
 
-   - Separate instances for each camera### Thrusters not responding
+### Thrusters not responding
 
 
 
@@ -402,20 +406,34 @@ The ROV's Raspberry Pi must run:- Check firewall settings (allow UDP port 14550)
 
 - Ensure joystick axes are moving (check "Joystick Input" panel)
 
-### Pi Setup
+### Pi Setup & Deployment
+
+**Deploy to Pi (one command):**
+
+```powershell
+# Windows
+.\deploy_to_pi.ps1
+
+# Or with custom host
+.\deploy_to_pi.ps1 -PiHost 192.168.1.100
+```
+
+This syncs all `pi_scripts` to the Raspberry Pi automatically.
+
+**First time on Pi:**
+```bash
+ssh pi@raspberrypi.local
+pip3 install pymavlink pyserial flask picamera2 opencv-python-headless numpy
+cd ~/mariner/pi_scripts
+./start_all_services.sh
+```
 
 ## 🧪 Testing Without Hardware
 
-```bash
+To test joystick input without connecting to Pixhawk:
 
-# On Raspberry PiTo test joystick input without connecting to Pixhawk:
-
-cd ~/mariner/pi_scripts
-
-bash start_all_services.sh1. Comment out `self.connect_pixhawk()` in `rovControlApp.py` (line ~42)
-
-```2. Run application
-
+1. Comment out `self.connect_pixhawk()` in `mainWindow.py`
+2. Run application
 3. Move joystick and observe thruster values update in GUI
 
 ---

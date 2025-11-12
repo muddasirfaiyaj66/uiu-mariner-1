@@ -7,8 +7,10 @@
   "mavlink_connection": "tcp:raspberrypi.local:7000",
   "joystick_target": null,
   "camera": {
-    "pipeline0": "udpsrc port=5000 ! application/x-rtp,encoding-name=H264,payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink",
-    "pipeline1": "udpsrc port=5001 ! application/x-rtp,encoding-name=H264,payload=97 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink"
+    "stream_url0": "http://raspberrypi.local:8080/video_feed",
+    "stream_url1": "http://raspberrypi.local:8081/video_feed",
+    "legacy_pipeline0": "udpsrc port=5000 ! application/x-rtp,encoding-name=H264,payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink",
+    "legacy_pipeline1": "udpsrc port=5001 ! application/x-rtp,encoding-name=H264,payload=97 ! rtph264depay ! avdec_h264 ! videoconvert ! appsink"
   },
   "sensors": {
     "host": "raspberrypi.local",
@@ -21,7 +23,9 @@
   "network": {
     "auto_detect": true,
     "pi_hostname": "raspberrypi.local",
-    "fallback_ip": "192.168.0.100"
+    "ethernet_ip": "192.168.1.100",
+    "wifi_fallback_ip": "192.168.0.100",
+    "notes": "Use ethernet_ip for tethered underwater operations, pi_hostname for WiFi testing"
   },
   "thrusters": {
     "total_count": 8,

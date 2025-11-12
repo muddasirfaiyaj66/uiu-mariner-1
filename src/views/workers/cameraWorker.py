@@ -1,6 +1,6 @@
 """
 Camera Worker Module with OpenCV Object Detection
-Handles dual camera feeds from Raspberry Pi with GStreamer and real-time object detection
+Handles dual camera feeds from Raspberry Pi via MJPEG HTTP streams with real-time object detection
 """
 
 import cv2
@@ -12,16 +12,16 @@ from PyQt6.QtGui import QImage, QPixmap
 class CameraWorker(QThread):
     """
     Worker thread for camera streaming with object detection.
-    Receives H.264 video stream via GStreamer UDP and applies OpenCV detection.
+    Receives MJPEG video stream via HTTP and applies OpenCV detection.
     """
 
     frame_ready = pyqtSignal(QPixmap)
     fps_update = pyqtSignal(float)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, pipeline, detection_enabled=True, camera_id=0, parent=None):
+    def __init__(self, stream_url, detection_enabled=True, camera_id=0, parent=None):
         super().__init__(parent)
-        self.pipeline = pipeline
+        self.stream_url = stream_url
         self.running = False
         self.detection_enabled = detection_enabled
         self.camera_id = camera_id
@@ -57,30 +57,33 @@ class CameraWorker(QThread):
             self.detection_enabled = False
 
     def run(self):
-        """Main camera capture loop."""
+        """Main camera capture loop with MJPEG stream."""
         import time
 
         self.running = True
         self.fps_start_time = time.time()
         retry_count = 0
-        max_retries = 2
+        max_retries = 3
 
         try:
             while self.running and retry_count < max_retries:
                 print(
-                    f"[CAM{self.camera_id}] Attempting to open stream (attempt {retry_count + 1}/{max_retries})..."
+                    f"[CAM{self.camera_id}] Attempting to open MJPEG stream (attempt {retry_count + 1}/{max_retries})..."
                 )
-                self.cap = cv2.VideoCapture(self.pipeline, cv2.CAP_GSTREAMER)
+                print(f"[CAM{self.camera_id}] URL: {self.stream_url}")
+
+                # Open MJPEG stream via HTTP
+                self.cap = cv2.VideoCapture(self.stream_url)
 
                 if not self.cap.isOpened():
                     retry_count += 1
-                    error_msg = f"Camera {self.camera_id}: Failed to open stream"
+                    error_msg = f"Camera {self.camera_id}: Failed to open MJPEG stream"
                     self.error_occurred.emit(error_msg)
-                    print(f"[CAM{self.camera_id}] ❌ Failed to open: {self.pipeline}")
+                    print(f"[CAM{self.camera_id}] ❌ Failed to open: {self.stream_url}")
 
                     if retry_count < max_retries:
-                        print(f"[CAM{self.camera_id}] Retrying in 1 second...")
-                        time.sleep(1)
+                        print(f"[CAM{self.camera_id}] Retrying in 2 seconds...")
+                        time.sleep(2)
                     else:
                         print(
                             f"[CAM{self.camera_id}] Max retries reached, showing placeholder"
@@ -89,13 +92,13 @@ class CameraWorker(QThread):
                         return
                     continue
 
-                print(f"[CAM{self.camera_id}] ✅ Stream opened successfully")
+                print(f"[CAM{self.camera_id}] ✅ MJPEG stream opened successfully")
                 break
 
             frame_timeout_count = 0
             max_frame_timeout = 30
             frame_skip_counter = 0
-            FRAME_SKIP = 2
+            FRAME_SKIP = 1  # Less aggressive frame skipping for MJPEG
 
             while self.running:
                 ret, frame = self.cap.read()
@@ -104,32 +107,49 @@ class CameraWorker(QThread):
                     frame_timeout_count += 1
                     if frame_timeout_count >= max_frame_timeout:
                         print(
-                            f"[CAM{self.camera_id}] Too many frame read failures, stopping"
+                            f"[CAM{self.camera_id}] Too many frame read failures, reconnecting..."
                         )
-                        self._show_placeholder()
-                        break
+                        # Try to reconnect
+                        if self.cap:
+                            self.cap.release()
+                        time.sleep(1)
+                        self.cap = cv2.VideoCapture(self.stream_url)
+                        if not self.cap.isOpened():
+                            self._show_placeholder()
+                            break
+                        frame_timeout_count = 0
                     time.sleep(0.1)
                     continue
 
                 frame_timeout_count = 0
 
+                # Optional frame skipping for performance
                 frame_skip_counter += 1
                 if frame_skip_counter <= FRAME_SKIP:
                     continue
                 frame_skip_counter = 0
 
-                frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
+                # Ensure consistent resolution (1920x1080 for HD)
+                if frame.shape[:2] != (1080, 1920):
+                    frame = cv2.resize(
+                        frame, (1920, 1080), interpolation=cv2.INTER_LINEAR
+                    )
 
+                # Apply object detection if enabled
                 if self.detection_enabled and self.detector is not None:
                     frame = self._apply_detection(frame)
 
+                # Add overlay information
                 frame = self._add_overlay(frame)
 
+                # Convert to QPixmap and emit
                 pixmap = self._frame_to_pixmap(frame)
                 self.frame_ready.emit(pixmap)
 
+                # Store current frame for capture
                 self.current_frame = frame.copy()
 
+                # Update FPS
                 self.fps_counter += 1
                 if time.time() - self.fps_start_time >= 1.0:
                     fps = self.fps_counter / (time.time() - self.fps_start_time)
@@ -152,7 +172,7 @@ class CameraWorker(QThread):
 
     def _show_placeholder(self):
         """Show placeholder image when camera is unavailable."""
-        placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+        placeholder = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
         text = f"Camera {self.camera_id + 1} Unavailable"
         cv2.putText(
@@ -292,12 +312,12 @@ class CameraWorker(QThread):
 
 class DualCameraManager:
     """
-    Manages two camera workers for dual camera setup.
+    Manages two camera workers for dual camera setup with MJPEG streams.
     """
 
-    def __init__(self, pipeline0, pipeline1):
-        self.camera0 = CameraWorker(pipeline0, detection_enabled=True, camera_id=0)
-        self.camera1 = CameraWorker(pipeline1, detection_enabled=True, camera_id=1)
+    def __init__(self, stream_url0, stream_url1):
+        self.camera0 = CameraWorker(stream_url0, detection_enabled=True, camera_id=0)
+        self.camera1 = CameraWorker(stream_url1, detection_enabled=True, camera_id=1)
 
         self.cameras = [self.camera0, self.camera1]
 
