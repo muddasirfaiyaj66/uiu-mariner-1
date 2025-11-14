@@ -20,6 +20,7 @@ from src.joystickController import JoystickController
 from src.views.workers.cameraWorker import CameraWorker, DualCameraManager
 from src.views.workers.sensorWorker import SensorTelemetryWorker, MockSensorWorker
 from src.views.workers.mediaManager import MediaManager
+from src.computer_vision.camera_detector import CameraDetector
 
 
 class MarinerROVControl(QMainWindow):
@@ -83,6 +84,11 @@ class MarinerROVControl(QMainWindow):
         self.ui_update_timer.timeout.connect(self.update_ui)
         self.ui_update_timer.start(2000)
 
+        # Attitude update timer (faster updates for smooth compass)
+        self.attitude_update_timer = QTimer(self)
+        self.attitude_update_timer.timeout.connect(self.update_attitude_from_pixhawk)
+        self.attitude_update_timer.start(100)  # Update every 100ms for smooth compass
+
         print(
             "[MARINER] [OK] Application initialized - components starting in background"
         )
@@ -131,22 +137,53 @@ class MarinerROVControl(QMainWindow):
         return default_config
 
     def init_ui(self):
-        """Initialize UI from .ui file or create programmatically."""
-        # Always use modern programmatic UI for best appearance
-        print("[UI] [ART] Creating modern UI...")
-        self.ui_loaded = False
-        self.create_ui_programmatically()
+        """Initialize UI from the new_ui_ui.py file."""
+        print("[UI] Loading new UI design...")
+
+        # Define color palette for status indicators (used in some methods)
+        self.colors = {
+            "bg_dark": "#0D1117",
+            "bg_secondary": "#161B22",
+            "bg_tertiary": "#21262D",
+            "accent": "#FF8800",
+            "accent_hover": "#FFA040",
+            "success": "#00D084",
+            "danger": "#FF4D4D",
+            "warning": "#FFB800",
+            "text_primary": "#E6EDF3",
+            "text_secondary": "#8B949E",
+            "border": "#30363D",
+            "border_accent": "#FF8800",
+        }
+
+        # Import and setup the new UI
+        from src.views.new_ui_ui import Ui_MainWindow
+
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
 
         # Set window properties
         self.setWindowTitle("UIU MARINER - ROV Control System")
-        self.setMinimumSize(1024, 600)  # More flexible minimum size
-        self.resize(1280, 720)  # Default size but user can resize
+
+        print("[UI] [OK] New UI loaded successfully")
 
         # Find and store references to UI elements
         self.find_ui_elements()
 
-    def create_ui_programmatically(self):
-        """Create modern UI programmatically with sleek dark theme."""
+        # Setup navigation between pages
+        self.setup_navigation()
+
+        # Initialize modern compass widget
+        self.init_modern_compass()
+
+    # ============================================================================
+    # OLD PROGRAMMATIC UI METHODS - NO LONGER USED (kept for reference)
+    # ============================================================================
+
+    def create_ui_programmatically_OLD(self):
+        """Create modern UI programmatically with sleek dark theme.
+        NOTE: This method is no longer used. The UI is now loaded from new_ui_ui.py
+        """
         from PyQt6.QtWidgets import (
             QVBoxLayout,
             QHBoxLayout,
@@ -317,8 +354,8 @@ class MarinerROVControl(QMainWindow):
         bottom_bar = self.create_bottom_bar()
         main_layout.addWidget(bottom_bar)
 
-    def create_top_bar(self):
-        """Create modern top navigation bar."""
+    def create_top_bar_OLD(self):
+        """Create modern top navigation bar. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QFrame, QHBoxLayout
 
         top_bar = QFrame()
@@ -380,8 +417,8 @@ class MarinerROVControl(QMainWindow):
 
         return top_bar
 
-    def create_camera_panel(self):
-        """Create modern camera display panel."""
+    def create_camera_panel_OLD(self):
+        """Create modern camera display panel. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QFrame
 
         panel = QFrame()
@@ -412,7 +449,7 @@ class MarinerROVControl(QMainWindow):
         layout.addWidget(main_label)
 
         self.lblCameraMain = QLabel(" Waiting for video feed...")
-        self.lblCameraMain.setMinimumSize(640, 360)  # More flexible size
+        self.lblCameraMain.setMinimumSize(800, 480)  # Increased camera height
         self.lblCameraMain.setScaledContents(False)
         self.lblCameraMain.setStyleSheet(
             f"""
@@ -439,7 +476,7 @@ class MarinerROVControl(QMainWindow):
         layout.addWidget(secondary_label)
 
         self.lblCameraSmall = QLabel(" Waiting for video feed...")
-        self.lblCameraSmall.setMinimumSize(320, 180)  # More flexible size
+        self.lblCameraSmall.setMinimumSize(400, 240)  # Increased camera height
         self.lblCameraSmall.setScaledContents(False)
         self.lblCameraSmall.setStyleSheet(
             f"""
@@ -455,8 +492,8 @@ class MarinerROVControl(QMainWindow):
 
         return panel
 
-    def create_right_panel(self):
-        """Create modern right side panel with status and controls."""
+    def create_right_panel_OLD(self):
+        """Create modern right side panel with status and controls. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QVBoxLayout, QFrame
 
         panel = QWidget()
@@ -480,8 +517,8 @@ class MarinerROVControl(QMainWindow):
 
         return panel
 
-    def create_status_panel(self):
-        """Create system status panel."""
+    def create_status_panel_OLD(self):
+        """Create system status panel. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QVBoxLayout, QGroupBox, QHBoxLayout
 
         group = QGroupBox("SYSTEM STATUS")
@@ -545,8 +582,8 @@ class MarinerROVControl(QMainWindow):
 
         return group
 
-    def create_sensor_panel(self):
-        """Create sensor readings panel."""
+    def create_sensor_panel_OLD(self):
+        """Create sensor readings panel. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QVBoxLayout, QGroupBox, QGridLayout
 
         group = QGroupBox("SENSOR TELEMETRY")
@@ -616,8 +653,8 @@ class MarinerROVControl(QMainWindow):
 
         return group
 
-    def create_control_panel(self):
-        """Create control buttons panel."""
+    def create_control_panel_OLD(self):
+        """Create control buttons panel. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QVBoxLayout, QGroupBox
 
         group = QGroupBox("CONTROL PANEL")
@@ -904,8 +941,8 @@ class MarinerROVControl(QMainWindow):
 
         return group
 
-    def create_bottom_bar(self):
-        """Create bottom status bar."""
+    def create_bottom_bar_OLD(self):
+        """Create bottom status bar. (OLD - NO LONGER USED)"""
         from PyQt6.QtWidgets import QFrame, QHBoxLayout
 
         bottom_bar = QFrame()
@@ -975,61 +1012,175 @@ class MarinerROVControl(QMainWindow):
         )
 
     def find_ui_elements(self):
-        """Find and store references to UI elements from loaded .ui file."""
-        # Try to find elements from .ui file, fallback to programmatic ones
-        # Only search if elements don't already exist (programmatic UI creates them directly)
+        """Map new UI elements to expected variable names for compatibility."""
         try:
-            # Camera labels
-            if not hasattr(self, "lblCameraSmall") or self.lblCameraSmall is None:
-                self.lblCameraSmall = self.findChild(QLabel, "lblCameraSmall")
-            if not hasattr(self, "lblCameraMain") or self.lblCameraMain is None:
-                self.lblCameraMain = self.findChild(QLabel, "lblCameraMain")
+            # Camera labels - map from new UI to old variable names
+            self.lblCameraMain = self.ui.lblCam1Feed
+            self.lblCameraSmall = self.ui.lblCam2Feed
 
-            # Status labels
-            if not hasattr(self, "lblPixhawkStatus") or self.lblPixhawkStatus is None:
-                self.lblPixhawkStatus = self.findChild(QLabel, "lblPixhawkStatus")
-            if not hasattr(self, "lblJoystickStatus") or self.lblJoystickStatus is None:
-                self.lblJoystickStatus = self.findChild(QLabel, "lblJoystickStatus")
-            if not hasattr(self, "lblModeStatus") or self.lblModeStatus is None:
-                self.lblModeStatus = self.findChild(QLabel, "lblModeStatus")
-            if not hasattr(self, "lblArmStatus") or self.lblArmStatus is None:
-                self.lblArmStatus = self.findChild(QLabel, "lblArmStatus")
+            # Status labels - map from new UI sensor status labels
+            self.lblPixhawkStatus = self.ui.lblPixhawkStatus
+            self.lblJoystickStatus = self.ui.lblJoystickStatus
 
-            # Sensor labels - DO NOT OVERWRITE if already created programmatically!
-            if not hasattr(self, "lblDepth") or self.lblDepth is None:
-                self.lblDepth = self.findChild(QLabel, "lblDepth")
-            if not hasattr(self, "lblTemperature") or self.lblTemperature is None:
-                self.lblTemperature = self.findChild(QLabel, "lblTemperature")
-            if not hasattr(self, "lblPressure") or self.lblPressure is None:
-                self.lblPressure = self.findChild(QLabel, "lblPressure")
+            # Mode and Arm status - use pixhawk and thrusters value labels
+            self.lblModeStatus = self.ui.lblPixhawkValue  # Will show mode
+            self.lblArmStatus = self.ui.lblThrustersValue  # Will show armed status
 
-            # Buttons
-            if not hasattr(self, "btnArm") or self.btnArm is None:
-                self.btnArm = self.findChild(QPushButton, "btnArm")
-            if not hasattr(self, "btnEmergencyStop") or self.btnEmergencyStop is None:
-                self.btnEmergencyStop = self.findChild(QPushButton, "btnEmergencyStop")
-            if (
-                not hasattr(self, "btnToggleDetection")
-                or self.btnToggleDetection is None
-            ):
-                self.btnToggleDetection = self.findChild(
-                    QPushButton, "btnToggleDetection"
-                )
+            # Sensor status label
+            self.lblSensorStatus = self.ui.lblCommsStatus  # Map to telemetry status
 
-            print("[UI] [OK] Found UI elements")
+            # Sensor reading labels - map to new UI value labels
+            # Note: lblDepth uses lblDepthStatusValue from the depth status frame
+            self.lblDepth = self.ui.lblDepthStatusValue
+            self.lblTemperature = self.ui.lblTemperatureValue
+            # Note: Pressure will show in hPa, not bar
+            self.lblPressure = self.ui.lblPressureValue
+
+            # Buttons - map from new UI
+            self.btnArm = self.ui.btnArmConnect  # ARM/CONNECT button
+            self.btnEmergencyStop = self.ui.btnEmergencyStop
+
+            # Media buttons
+            self.btnCaptureImage = self.ui.btnCapture
+            self.btnStartRecording = self.ui.btnRecord
+
+            # Create placeholder for detection toggle (not in new UI, will add to settings)
+            self.btnToggleDetection = None
+
+            # Connection status label
+            self.conn_label = self.ui.lblConnectionStatus
+
+            # Attitude/Compass elements
+            self.lblCompass = self.ui.lblCompass
+            self.lblHeadingDisplay = self.ui.lblHeadingDisplay
+            self.lblPitchValue = self.ui.lblPitchValue
+            self.lblRollValue = self.ui.lblRollValue
+
+            # Additional sensor depth label (there's also lblDepthLabel)
+            self.lblDepthLabel = self.ui.lblDepthLabel
+
+            # Camera status labels (lblCam1 for main camera, lblCam2 for secondary)
+            self.lblCam1Status = self.ui.lblCam1
+            self.lblCam2Status = self.ui.lblCam2
+
+            print("[UI] [OK] Mapped new UI elements to expected variable names")
         except Exception as e:
-            print(f"[UI] Element finding error: {e}")
+            print(f"[UI] Element mapping error: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def setup_navigation(self):
+        """Setup navigation between different pages in the stacked widget."""
+        try:
+            # Connect sidebar buttons to switch pages
+            self.ui.btnDashboard.clicked.connect(lambda: self.switch_page(0))
+            self.ui.btnGallery.clicked.connect(lambda: self.switch_page(1))
+            self.ui.btnDataAnalysis.clicked.connect(lambda: self.switch_page(2))
+            self.ui.btnSettings.clicked.connect(lambda: self.switch_page(3))
+
+            # Set Dashboard as default page
+            self.ui.stackedWidget.setCurrentIndex(0)
+
+            print("[UI] [OK] Navigation setup complete")
+        except Exception as e:
+            print(f"[UI] Navigation setup error: {e}")
+
+    def init_modern_compass(self):
+        """Initialize the modern compass widget to replace the placeholder."""
+        try:
+            from src.views.workers.modernCompass import ModernCompass
+
+            # Create modern compass widget
+            self.compass_widget = ModernCompass()
+            self.compass_widget.setMinimumSize(
+                150, 150
+            )  # Increased for better visibility
+            self.compass_widget.setMaximumSize(
+                200, 200
+            )  # Increased for better visibility
+
+            # Replace the lblCompass placeholder with the actual compass widget
+            if hasattr(self, "lblCompass") and self.lblCompass:
+                # Get the parent layout
+                parent_layout = self.lblCompass.parent().layout()
+                if parent_layout:
+                    # Find the index of lblCompass in the layout
+                    for i in range(parent_layout.count()):
+                        if parent_layout.itemAt(i).widget() == self.lblCompass:
+                            # Hide the placeholder
+                            self.lblCompass.hide()
+                            # Insert the compass widget at the same position
+                            parent_layout.insertWidget(i, self.compass_widget)
+                            break
+
+            # Initialize attitude data
+            self.current_heading = 0.0
+            self.current_pitch = 0.0
+            self.current_roll = 0.0
+
+            print("[COMPASS] [OK] Modern compass widget initialized")
+        except Exception as e:
+            print(f"[COMPASS] [ERR] Failed to initialize: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def switch_page(self, index):
+        """Switch to a different page in the stacked widget."""
+        try:
+            self.ui.stackedWidget.setCurrentIndex(index)
+
+            # Load gallery when switching to gallery page
+            if index == 1:  # Gallery page
+                self.load_gallery()
+
+            # Update button checked states
+            self.ui.btnDashboard.setChecked(index == 0)
+            self.ui.btnGallery.setChecked(index == 1)
+            self.ui.btnDataAnalysis.setChecked(index == 2)
+            self.ui.btnSettings.setChecked(index == 3)
+        except Exception as e:
+            print(f"[UI] Page switch error: {e}")
 
     def setup_connections(self):
         """Setup signal-slot connections for UI elements."""
         try:
-            # Note: btnArm and btnEmergencyStop are already connected in create_control_panel()
-            # Only connect additional UI elements here if needed
+            # Connect main control buttons
+            if hasattr(self, "btnArm") and self.btnArm:
+                self.btnArm.clicked.connect(self.toggle_arm)
 
+            if hasattr(self, "btnEmergencyStop") and self.btnEmergencyStop:
+                self.btnEmergencyStop.clicked.connect(self.emergency_stop)
+
+            # Connect media buttons
+            if hasattr(self, "btnCaptureImage") and self.btnCaptureImage:
+                self.btnCaptureImage.clicked.connect(self.capture_image)
+
+            if hasattr(self, "btnStartRecording") and self.btnStartRecording:
+                self.btnStartRecording.clicked.connect(self.toggle_recording)
+
+            # Connect gallery controls
+            if hasattr(self.ui, "btnRefreshGallery"):
+                self.ui.btnRefreshGallery.clicked.connect(self.load_gallery)
+
+            if hasattr(self.ui, "cmbGalleryFilter"):
+                self.ui.cmbGalleryFilter.currentIndexChanged.connect(self.load_gallery)
+
+            # Connect detection toggle if it exists
             if hasattr(self, "btnToggleDetection") and self.btnToggleDetection:
                 self.btnToggleDetection.clicked.connect(self.toggle_detection)
-        except:
-            pass
+
+            # Connect zoom buttons
+            if hasattr(self.ui, "btnZoomIn") and self.ui.btnZoomIn:
+                self.ui.btnZoomIn.clicked.connect(self.zoom_in_cameras)
+
+            if hasattr(self.ui, "btnZoomOut") and self.ui.btnZoomOut:
+                self.ui.btnZoomOut.clicked.connect(self.zoom_out_cameras)
+
+            print("[UI] [OK] Button connections established")
+        except Exception as e:
+            print(f"[UI] Connection setup error: {e}")
 
     def start_camera_feeds(self):
         """Start dual camera feeds with object detection via MJPEG streams."""
@@ -1047,18 +1198,107 @@ class MarinerROVControl(QMainWindow):
 
             self.camera_manager = DualCameraManager(stream_url0, stream_url1)
 
-            # Connect camera 0 to small display
-            self.camera_manager.camera0.frame_ready.connect(self.update_camera_small)
+            # Connect camera 0 (port 8080) to MAIN display
+            self.camera_manager.camera0.frame_ready.connect(self.update_camera_main)
             self.camera_manager.camera0.error_occurred.connect(self.handle_camera_error)
+            self.camera_manager.camera0.status_update.connect(
+                self.update_camera_status_main
+            )
 
-            # Connect camera 1 to main display
-            self.camera_manager.camera1.frame_ready.connect(self.update_camera_main)
+            # Connect camera 1 (port 8081) to CAM2 display
+            self.camera_manager.camera1.frame_ready.connect(self.update_camera_small)
             self.camera_manager.camera1.error_occurred.connect(self.handle_camera_error)
+            self.camera_manager.camera1.status_update.connect(
+                self.update_camera_status_cam2
+            )
 
             self.camera_manager.start_all()
             print("[CAMERAS] [OK] Dual MJPEG camera feeds started")
+
+            # Setup object detection
+            self.setup_object_detection()
         except Exception as e:
             print(f"[CAMERAS] [ERR] Failed to start: {e}")
+
+    def setup_object_detection(self):
+        """Setup object detection for both cameras."""
+        try:
+            print("[DETECTION] Initializing object detection...")
+
+            # Create detector for camera 0 (main camera)
+            self.detector0 = CameraDetector(camera_id=0)
+            self.detector0.set_mode("face")  # Default: face/eye/smile detection
+            print(
+                f"[DETECTION] Camera 0 detector created - Mode: {self.detector0.mode}, Enabled: {self.detector0.enabled}"
+            )
+
+            # Create detector for camera 1 (secondary camera)
+            self.detector1 = CameraDetector(camera_id=1)
+            self.detector1.set_mode("face")  # Default: face/eye/smile detection
+            print(
+                f"[DETECTION] Camera 1 detector created - Mode: {self.detector1.mode}, Enabled: {self.detector1.enabled}"
+            )
+
+            # Attach detectors to camera workers
+            if self.camera_manager:
+                self.camera_manager.camera0.set_detector(self.detector0)
+                self.camera_manager.camera1.set_detector(self.detector1)
+
+                # Enable detection by default
+                self.camera_manager.camera0.enable_detection()
+                self.camera_manager.camera1.enable_detection()
+
+                print("[DETECTION] ✅ Object detection ACTIVE on both cameras")
+                print(
+                    f"[DETECTION] Camera 0: detection_enabled={self.camera_manager.camera0.detection_enabled}"
+                )
+                print(
+                    f"[DETECTION] Camera 1: detection_enabled={self.camera_manager.camera1.detection_enabled}"
+                )
+                print("[DETECTION] Mode: Face Detection (Face/Eye/Smile)")
+                print(
+                    "[DETECTION] You should see 'FACE DETECTION' text on camera feeds"
+                )
+        except Exception as e:
+            print(f"[DETECTION] [ERR] Failed to setup: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def toggle_detection(self):
+        """Toggle object detection on/off."""
+        try:
+            if self.camera_manager:
+                if self.camera_manager.camera0.detection_enabled:
+                    self.camera_manager.camera0.disable_detection()
+                    self.camera_manager.camera1.disable_detection()
+                    print("[DETECTION] Disabled")
+                else:
+                    self.camera_manager.camera0.enable_detection()
+                    self.camera_manager.camera1.enable_detection()
+                    print("[DETECTION] Enabled")
+        except Exception as e:
+            print(f"[DETECTION] Toggle error: {e}")
+
+    def zoom_in_cameras(self):
+        """Zoom in on both cameras"""
+        try:
+            if self.camera_manager:
+                self.camera_manager.zoom_in_all()
+                zoom_level = self.camera_manager.camera0.zoom_level
+                print(f"[ZOOM] Zoomed in to {zoom_level:.2f}x")
+        except Exception as e:
+            print(f"[ZOOM] Error: {e}")
+
+    def zoom_out_cameras(self):
+        """Zoom out on both cameras"""
+        try:
+            if self.camera_manager:
+                self.camera_manager.zoom_out_all()
+                zoom_level = self.camera_manager.camera0.zoom_level
+                print(f"[ZOOM] Zoomed out to {zoom_level:.2f}x")
+        except Exception as e:
+            print(f"[ZOOM] Error: {e}")
 
     def start_sensor_telemetry(self):
         """Start sensor telemetry worker."""
@@ -1109,20 +1349,24 @@ class MarinerROVControl(QMainWindow):
             if self.pixhawk.connect():
                 print("[PIXHAWK] [OK] Connected")
                 if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
-                    self.lblPixhawkStatus.setText(
-                        f"Pixhawk: Connected ({self.pixhawk.link})"
-                    )
-                    self.lblPixhawkStatus.setStyleSheet("color: #00FF00;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">Connected</span></p></body></html>'
+                    self.lblPixhawkStatus.setText(status_html)
+                if hasattr(self, "lblModeStatus") and self.lblModeStatus:
+                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ONLINE</span></p></body></html>"
+                    self.lblModeStatus.setText(mode_html)
             else:
                 print("[PIXHAWK] [ERR] Connection failed")
                 if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
-                    self.lblPixhawkStatus.setText("Pixhawk: Disconnected")
-                    self.lblPixhawkStatus.setStyleSheet("color: #FF0000;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">Disconnected</span></p></body></html>'
+                    self.lblPixhawkStatus.setText(status_html)
+                if hasattr(self, "lblModeStatus") and self.lblModeStatus:
+                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ff5555;\">OFFLINE</span></p></body></html>"
+                    self.lblModeStatus.setText(mode_html)
         except Exception as e:
             print(f"[PIXHAWK] [ERR] Error: {e}")
             if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
-                self.lblPixhawkStatus.setText("Pixhawk: Error")
-                self.lblPixhawkStatus.setStyleSheet("color: #FF0000;")
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">Error</span></p></body></html>'
+                self.lblPixhawkStatus.setText(status_html)
 
     def init_joystick(self):
         """Initialize joystick controller."""
@@ -1133,21 +1377,31 @@ class MarinerROVControl(QMainWindow):
             if self.joystick.is_connected():
                 print(f"[JOYSTICK] [OK] Connected: {self.joystick.joystick_name}")
                 if hasattr(self, "lblJoystickStatus") and self.lblJoystickStatus:
-                    self.lblJoystickStatus.setText(
-                        f"Joystick: {self.joystick.joystick_name}"
-                    )
-                    self.lblJoystickStatus.setStyleSheet("color: #00FF00;")
+                    status_html = f'<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">{self.joystick.joystick_name} - Ready</span></p></body></html>'
+                    self.lblJoystickStatus.setText(status_html)
+                # Update the joystick value label to show ONLINE
+                if hasattr(self, "ui") and hasattr(self.ui, "lblJoystickValue"):
+                    value_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ONLINE</span></p></body></html>"
+                    self.ui.lblJoystickValue.setText(value_html)
             else:
                 print(f"[JOYSTICK]  No joystick connected")
                 if hasattr(self, "lblJoystickStatus") and self.lblJoystickStatus:
-                    self.lblJoystickStatus.setText("Joystick: Not Found")
-                    self.lblJoystickStatus.setStyleSheet("color: #FF8800;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ffa500;">Not Found</span></p></body></html>'
+                    self.lblJoystickStatus.setText(status_html)
+                # Update the joystick value label to show OFFLINE
+                if hasattr(self, "ui") and hasattr(self.ui, "lblJoystickValue"):
+                    value_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ff5555;\">OFFLINE</span></p></body></html>"
+                    self.ui.lblJoystickValue.setText(value_html)
 
         except Exception as e:
             print(f"[JOYSTICK] [ERR] Error: {e}")
             if hasattr(self, "lblJoystickStatus") and self.lblJoystickStatus:
-                self.lblJoystickStatus.setText("Joystick: Error")
-                self.lblJoystickStatus.setStyleSheet("color: #FF0000;")
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">Error</span></p></body></html>'
+                self.lblJoystickStatus.setText(status_html)
+            # Update the joystick value label to show OFFLINE
+            if hasattr(self, "ui") and hasattr(self.ui, "lblJoystickValue"):
+                value_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ff5555;\">OFFLINE</span></p></body></html>"
+                self.ui.lblJoystickValue.setText(value_html)
 
     @pyqtSlot(QPixmap)
     def update_camera_small(self, pixmap):
@@ -1173,18 +1427,51 @@ class MarinerROVControl(QMainWindow):
                 )
             )
 
+    @pyqtSlot(str)
+    def update_camera_status_main(self, status):
+        """Update main camera (port 8080) status label."""
+        if hasattr(self, "lblCam1Status") and self.lblCam1Status:
+            if status == "Connected":
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">CAM 1 - Connected</span></p></body></html>'
+            else:
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">CAM 1 - Disconnected</span></p></body></html>'
+            self.lblCam1Status.setText(status_html)
+
+    @pyqtSlot(str)
+    def update_camera_status_cam2(self, status):
+        """Update secondary camera (port 8081) status label."""
+        if hasattr(self, "lblCam2Status") and self.lblCam2Status:
+            if status == "Connected":
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">CAM 2 - Connected</span></p></body></html>'
+            else:
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">CAM 2 - Disconnected</span></p></body></html>'
+            self.lblCam2Status.setText(status_html)
+
     @pyqtSlot(dict)
     def update_sensor_display(self, data):
         """Update sensor display with new data."""
         try:
             if hasattr(self, "lblDepth") and self.lblDepth:
-                self.lblDepth.setText(f"{data['depth']:.1f} m")
+                # Format for new UI with HTML styling
+                depth_html = f'<html><head/><body><p><span style=" font-family:\'Consolas\'; font-size:16pt; font-weight:600; color:#00d4ff;">{data["depth"]:.1f}</span><span style=" font-family:\'Consolas\'; font-size:10pt; color:#808080;"> m</span></p></body></html>'
+                self.lblDepth.setText(depth_html)
+
+                # Also update the depth label in attitude section
+                if hasattr(self, "lblDepthLabel") and self.lblDepthLabel:
+                    depth_label_html = f'<html><head/><body><p><span style=" font-family:\'Consolas\'; font-size:11pt; font-weight:600; color:#00d4ff;">{data["depth"]:.1f}</span><span style=" font-size:9pt; color:#808080;"> m</span></p></body></html>'
+                    self.lblDepthLabel.setText(depth_label_html)
 
             if hasattr(self, "lblTemperature") and self.lblTemperature:
-                self.lblTemperature.setText(f"{data['temperature']:.1f}°C")
+                # Format for new UI with HTML styling
+                temp_html = f'<html><head/><body><p><span style=" font-family:\'Consolas\'; font-size:16pt; font-weight:600; color:#00d4ff;">{data["temperature"]:.1f}</span><span style=" font-family:\'Consolas\'; font-size:10pt; color:#808080;"> °C</span></p></body></html>'
+                self.lblTemperature.setText(temp_html)
 
             if hasattr(self, "lblPressure") and self.lblPressure:
-                self.lblPressure.setText(f"{data['pressure']:.1f} hPa")
+                # Format for new UI with HTML styling
+                # Convert hPa to bar (1 bar = 1000 hPa) for consistency with UI design
+                pressure_bar = data["pressure"] / 1000.0
+                pressure_html = f"<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:16pt; font-weight:600; color:#00d4ff;\">{pressure_bar:.2f}</span><span style=\" font-family:'Consolas'; font-size:10pt; color:#808080;\"> bar</span></p></body></html>"
+                self.lblPressure.setText(pressure_html)
 
             # Force immediate UI update
             QApplication.processEvents()
@@ -1192,21 +1479,77 @@ class MarinerROVControl(QMainWindow):
         except Exception as e:
             print(f"[UI]  Error updating sensor display: {e}")
 
+    def update_attitude_display(self, heading=None, pitch=None, roll=None):
+        """Update the attitude/compass display with current orientation data."""
+        try:
+            # Update stored values
+            if heading is not None:
+                self.current_heading = heading
+            if pitch is not None:
+                self.current_pitch = pitch
+            if roll is not None:
+                self.current_roll = roll
+
+            # Update compass widget
+            if hasattr(self, "compass_widget") and self.compass_widget:
+                self.compass_widget.heading = self.current_heading
+
+            # Update heading display
+            if hasattr(self, "lblHeadingDisplay") and self.lblHeadingDisplay:
+                heading_html = f'<html><head/><body><p align="center"><span style=" font-family:\'Consolas\'; font-size:16pt; font-weight:600; color:#ea8a35;">{self.current_heading:.1f}°</span></p><p align="center"><span style=" font-size:9pt; color:#808080;">North</span></p></body></html>'
+                self.lblHeadingDisplay.setText(heading_html)
+
+            # Update pitch display
+            if hasattr(self, "lblPitchValue") and self.lblPitchValue:
+                pitch_color = "#00d4ff" if abs(self.current_pitch) < 15 else "#ffa500"
+                pitch_html = f"<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:14pt; font-weight:600; color:{pitch_color};\">{self.current_pitch:.1f}°</span></p></body></html>"
+                self.lblPitchValue.setText(pitch_html)
+
+            # Update roll display
+            if hasattr(self, "lblRollValue") and self.lblRollValue:
+                roll_color = "#00d4ff" if abs(self.current_roll) < 15 else "#ffa500"
+                roll_html = f"<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:14pt; font-weight:600; color:{roll_color};\">{self.current_roll:.1f}°</span></p></body></html>"
+                self.lblRollValue.setText(roll_html)
+
+        except Exception as e:
+            print(f"[ATTITUDE] Error updating display: {e}")
+
+    def update_attitude_from_pixhawk(self):
+        """Fetch and update attitude data from Pixhawk."""
+        try:
+            # Only update if Pixhawk is connected
+            if not self.pixhawk or not self.pixhawk.connected:
+                return
+
+            # Get attitude data from Pixhawk
+            attitude_data = self.pixhawk.get_attitude()
+
+            if attitude_data and attitude_data.get("connected"):
+                # Update the display with new attitude data
+                self.update_attitude_display(
+                    heading=attitude_data.get("heading"),
+                    pitch=attitude_data.get("pitch"),
+                    roll=attitude_data.get("roll"),
+                )
+        except Exception as e:
+            # Silently fail - this runs frequently
+            pass
+
     @pyqtSlot(bool)
     def handle_sensor_status(self, connected):
         """Handle sensor connection status changes."""
         status_text = "Sensors: Connected" if connected else "Sensors: Disconnected"
-        status_color = "#00FF00" if connected else "#FF0000"
+        status_color = "#00d4ff" if connected else "#ff5555"
         print(f"[SENSORS] {'[OK]' if connected else '[ERR]'} {status_text}")
 
-        # Update UI label
+        # Update UI label with HTML formatting for new UI
         if hasattr(self, "lblSensorStatus") and self.lblSensorStatus:
             if connected:
-                self.lblSensorStatus.setText(" Connected")
-                self.lblSensorStatus.setStyleSheet("color: #00FF00;")
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">Connected</span></p></body></html>'
+                self.lblSensorStatus.setText(status_html)
             else:
-                self.lblSensorStatus.setText(" Disconnected")
-                self.lblSensorStatus.setStyleSheet("color: #FF0000;")
+                status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">Disconnected</span></p></body></html>'
+                self.lblSensorStatus.setText(status_html)
 
         # Update bottom bar network status based on PIXHAWK connection
         # (Pi is connected if Pixhawk MAVProxy is accessible)
@@ -1230,10 +1573,10 @@ class MarinerROVControl(QMainWindow):
                         else "raspberrypi.local"
                     )
                 self.conn_label.setText(f" Network: {pi_host} (Connected)")
-                self.conn_label.setStyleSheet(f"color: {self.colors['success']};")
+                self.conn_label.setStyleSheet("color: #00d4ff;")  # Cyan for connected
             else:
                 self.conn_label.setText(" Network: Disconnected")
-                self.conn_label.setStyleSheet(f"color: {self.colors['danger']};")
+                self.conn_label.setStyleSheet("color: #ff5555;")  # Red for disconnected
 
     @pyqtSlot(str)
     def handle_camera_error(self, error_msg):
@@ -1297,27 +1640,49 @@ class MarinerROVControl(QMainWindow):
                 self._ui_cache_pixhawk = False
                 self._ui_cache_joystick = False
 
+            # Update Pixhawk status with HTML formatting
             if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
                 is_connected = getattr(self, "_pixhawk_connected", False)
 
                 if is_connected:
-                    self.lblPixhawkStatus.setText(
-                        f" Pixhawk: Connected ({self.pixhawk.link})"
-                    )
-                    self.lblPixhawkStatus.setStyleSheet("color: #00FF00;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">Connected</span></p></body></html>'
+                    self.lblPixhawkStatus.setText(status_html)
                 else:
-                    self.lblPixhawkStatus.setText(" Pixhawk: Disconnected")
-                    self.lblPixhawkStatus.setStyleSheet("color: #FF0000;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">Disconnected</span></p></body></html>'
+                    self.lblPixhawkStatus.setText(status_html)
 
+            # Update Pixhawk value label (ONLINE/OFFLINE)
+            if hasattr(self, "lblModeStatus") and self.lblModeStatus:
+                is_connected = getattr(self, "_pixhawk_connected", False)
+                if is_connected:
+                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ONLINE</span></p></body></html>"
+                    self.lblModeStatus.setText(mode_html)
+                else:
+                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ff5555;\">OFFLINE</span></p></body></html>"
+                    self.lblModeStatus.setText(mode_html)
+
+            # Update Joystick status with HTML formatting
             if hasattr(self, "lblJoystickStatus") and self.lblJoystickStatus:
                 if self.joystick and self.joystick.is_connected():
-                    ready = " Ready" if self.joystick.is_ready() else " Calibrating..."
-                    self.lblJoystickStatus.setText(
-                        f"Joystick: {self.joystick.joystick_name} {ready}"
+                    ready_text = (
+                        "Ready" if self.joystick.is_ready() else "Calibrating..."
                     )
+                    joystick_name = self.joystick.joystick_name or "Controller"
+                    status_html = f'<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">{joystick_name} - {ready_text}</span></p></body></html>'
+                    self.lblJoystickStatus.setText(status_html)
+
+                    # Also update the joystick value label to show ONLINE
+                    if hasattr(self, "ui") and hasattr(self.ui, "lblJoystickValue"):
+                        value_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ONLINE</span></p></body></html>"
+                        self.ui.lblJoystickValue.setText(value_html)
                 else:
-                    self.lblJoystickStatus.setText(" Joystick: Disconnected")
-                    self.lblJoystickStatus.setStyleSheet("color: #FF0000;")
+                    status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">No Input Device</span></p></body></html>'
+                    self.lblJoystickStatus.setText(status_html)
+
+                    # Also update the joystick value label to show OFFLINE
+                    if hasattr(self, "ui") and hasattr(self.ui, "lblJoystickValue"):
+                        value_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ff5555;\">OFFLINE</span></p></body></html>"
+                        self.ui.lblJoystickValue.setText(value_html)
 
         except Exception as e:
             print(f"[UI]  Update error: {e}")
@@ -1332,21 +1697,19 @@ class MarinerROVControl(QMainWindow):
             if self.pixhawk.disarm():
                 self.armed = False
                 if hasattr(self, "lblArmStatus"):
-                    self.lblArmStatus.setText("Armed: NO")
-                    self.lblArmStatus.setStyleSheet("color: #FF8800;")
+                    status_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#ffa500;\">IDLE</span></p></body></html>"
+                    self.lblArmStatus.setText(status_html)
                 if hasattr(self, "btnArm"):
-                    self.btnArm.setText("ARM THRUSTERS")
+                    self.btnArm.setText("🚀 ARM THRUSTERS")
                 print("[ARM]  Disarmed")
         else:
             if self.pixhawk.arm():
                 self.armed = True
                 if hasattr(self, "lblArmStatus"):
-                    self.lblArmStatus.setText("Armed: YES")
-                    self.lblArmStatus.setStyleSheet(
-                        "color: #00FF00; font-weight: bold;"
-                    )
+                    status_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ARMED</span></p></body></html>"
+                    self.lblArmStatus.setText(status_html)
                 if hasattr(self, "btnArm"):
-                    self.btnArm.setText("DISARM THRUSTERS")
+                    self.btnArm.setText("⚠️ DISARM")
                 print("[ARM] [OK] Armed - CAUTION!")
 
     def emergency_stop(self):
@@ -1494,47 +1857,97 @@ class MarinerROVControl(QMainWindow):
         print("[CAMERAS] [OK] Camera feeds restarted")
 
     def capture_image(self):
-        """Capture image from primary camera."""
+        """Capture image from main camera (port 8080)."""
         if not self.camera_manager:
             print("[MEDIA] [ERR] Camera manager not initialized")
             return
 
         try:
-            camera = self.camera_manager.camera1
+            # Use camera0 (port 8080) - the main camera feed
+            camera = self.camera_manager.camera0
             frame = camera.get_frame()
 
             if frame is not None:
-                filepath = self.media_manager.capture_image(frame, camera_id=1)
+                filepath = self.media_manager.capture_image(frame, camera_id=0)
                 if filepath:
                     from PyQt6.QtWidgets import QMessageBox
 
                     QMessageBox.information(
-                        self, "Capture Complete", f"Image saved:\n{filepath}"
+                        self, "Capture Complete", f"Image saved to:\n{filepath}"
                     )
+                    print(f"[MEDIA] [OK] Image captured: {filepath}")
             else:
                 print("[MEDIA]  No frame available for capture")
+                from PyQt6.QtWidgets import QMessageBox
+
+                QMessageBox.warning(
+                    self,
+                    "Capture Failed",
+                    "No camera frame available.\nPlease ensure camera is connected.",
+                )
         except Exception as e:
             print(f"[MEDIA] [ERR] Capture failed: {e}")
 
     def toggle_recording(self):
-        """Toggle video recording on/off."""
+        """Toggle video recording on/off from main camera (port 8080)."""
         if not self.camera_manager:
             print("[MEDIA] [ERR] Camera manager not initialized")
             return
 
         try:
-            camera = self.camera_manager.camera1
-            if self.media_manager.start_recording(640, 480, 30, camera_id=1):
-                self.btnStartRecording.hide()
-                self.btnStopRecording.show()
+            # Check if already recording
+            if self.media_manager.is_recording():
+                self.stop_recording()
+                return
+
+            # Use camera0 (port 8080) - the main camera feed
+            camera = self.camera_manager.camera0
+            frame = camera.get_frame()
+
+            if frame is None:
+                print("[MEDIA]  No frame available for recording")
+                from PyQt6.QtWidgets import QMessageBox
+
+                QMessageBox.warning(
+                    self,
+                    "Recording Failed",
+                    "No camera frame available.\nPlease ensure camera is connected.",
+                )
+                return
+
+            # Get frame dimensions
+            height, width = frame.shape[:2]
+
+            if self.media_manager.start_recording(width, height, 30, camera_id=0):
+                # Update button states
+                if hasattr(self, "btnStartRecording"):
+                    self.btnStartRecording.setText("⏹ STOP")
+                    self.btnStartRecording.setStyleSheet(
+                        """
+                        QPushButton {
+                            background-color: #d32f2f;
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            padding: 10px;
+                            font-weight: bold;
+                        }
+                        QPushButton:hover {
+                            background-color: #f44336;
+                        }
+                    """
+                    )
 
                 self.recording_timer = QTimer(self)
                 self.recording_timer.timeout.connect(self._write_recording_frame)
-                self.recording_timer.start(33)
+                self.recording_timer.start(33)  # ~30 FPS
 
                 print("[MEDIA] [OK] Recording started")
         except Exception as e:
             print(f"[MEDIA] [ERR] Toggle recording failed: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def stop_recording(self):
         """Stop video recording."""
@@ -1548,25 +1961,283 @@ class MarinerROVControl(QMainWindow):
                 self.recording_timer = None
 
             filepath = self.media_manager.stop_recording()
-            self.btnStopRecording.hide()
-            self.btnStartRecording.show()
+
+            # Restore button appearance
+            if hasattr(self, "btnStartRecording"):
+                self.btnStartRecording.setText("⏺ RECORD")
+                self.btnStartRecording.setStyleSheet(
+                    """
+                    QPushButton {
+                        background-color: #FF8800;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 10px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #FFA040;
+                    }
+                """
+                )
 
             if filepath:
                 from PyQt6.QtWidgets import QMessageBox
 
-                msg = f"Video saved:\n\n{filepath}"
+                msg = f"Video saved to:\n{filepath}"
                 QMessageBox.information(self, "Recording Complete", msg)
-            print("[MEDIA] [OK] Recording stopped")
+            print(f"[MEDIA] [OK] Recording stopped: {filepath}")
         except Exception as e:
             print(f"[MEDIA] [ERR] Stop recording failed: {e}")
 
+    def load_gallery(self):
+        """Load media files from the media folder and display in gallery."""
+        try:
+            from pathlib import Path
+            from PyQt6.QtWidgets import (
+                QFrame,
+                QVBoxLayout,
+                QLabel,
+                QPushButton,
+                QWidget,
+            )
+            from PyQt6.QtCore import Qt
+            from PyQt6.QtGui import QPixmap
+            import os
+
+            print("[GALLERY] Loading gallery...")
+
+            # Get filter selection
+            filter_type = "All"
+            if hasattr(self.ui, "cmbGalleryFilter"):
+                filter_text = self.ui.cmbGalleryFilter.currentText()
+                print(f"[GALLERY] Filter: {filter_text}")
+
+                # Handle emoji-based filter text
+                if "All" in filter_text or "📁" in filter_text:
+                    filter_type = "All"
+                elif "Image" in filter_text or "📷" in filter_text:
+                    filter_type = "Images"
+                elif "Video" in filter_text or "🎥" in filter_text:
+                    filter_type = "Videos"
+                else:
+                    filter_type = filter_text  # Fallback to original text
+
+                print(f"[GALLERY] Resolved filter type: {filter_type}")
+
+            # Get media directory - use absolute path
+            media_dir = Path(__file__).parent.parent.parent / "media"
+            images_dir = media_dir / "images"
+            videos_dir = media_dir / "videos"
+
+            print(f"[GALLERY] Media dir: {media_dir}")
+            print(f"[GALLERY] Images dir exists: {images_dir.exists()}")
+            print(f"[GALLERY] Videos dir exists: {videos_dir.exists()}")
+
+            # Ensure directories exist
+            images_dir.mkdir(parents=True, exist_ok=True)
+            videos_dir.mkdir(parents=True, exist_ok=True)
+
+            # Collect media files - use set to avoid duplicates
+            media_files_set = set()
+
+            print(f"[GALLERY] Searching for files with filter_type: {filter_type}")
+
+            if filter_type in ["All", "Images"]:
+                print(f"[GALLERY] Scanning images directory: {images_dir}")
+                if images_dir.exists():
+                    # Use case-insensitive matching - only lowercase patterns
+                    for ext in ["*.png", "*.jpg", "*.jpeg"]:
+                        found_files = list(images_dir.glob(ext))
+                        print(f"[GALLERY]   {ext}: {len(found_files)} files")
+                        for f in found_files:
+                            print(f"[GALLERY]     - {f.name}")
+                            media_files_set.add((f, "image"))
+                else:
+                    print(f"[GALLERY] Images directory does not exist!")
+
+            if filter_type in ["All", "Videos"]:
+                print(f"[GALLERY] Scanning videos directory: {videos_dir}")
+                if videos_dir.exists():
+                    # Use case-insensitive matching - only lowercase patterns
+                    for ext in ["*.mp4", "*.avi", "*.mov"]:
+                        found_files = list(videos_dir.glob(ext))
+                        print(f"[GALLERY]   {ext}: {len(found_files)} files")
+                        for f in found_files:
+                            media_files_set.add((f, "video"))
+                else:
+                    print(f"[GALLERY] Videos directory does not exist!")
+
+            # Convert set back to list
+            media_files = list(media_files_set)
+            print(f"[GALLERY] Total unique media files found: {len(media_files)}")
+
+            # Sort by modification time (newest first)
+            media_files.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
+
+            # Check if gallery grid exists
+            if not hasattr(self.ui, "gridLayout_gallery"):
+                print("[GALLERY] [ERR] gridLayout_gallery not found in UI")
+                return
+
+            gallery_grid = self.ui.gridLayout_gallery
+
+            # Remove all existing items except lblGalleryEmpty
+            items_to_remove = []
+            for i in range(gallery_grid.count()):
+                item = gallery_grid.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    # Don't delete the empty label
+                    if widget.objectName() != "lblGalleryEmpty":
+                        items_to_remove.append(widget)
+
+            # Delete the collected items
+            for widget in items_to_remove:
+                gallery_grid.removeWidget(widget)
+                widget.deleteLater()
+
+            # Show/hide empty message
+            if hasattr(self.ui, "lblGalleryEmpty"):
+                if len(media_files) == 0:
+                    try:
+                        self.ui.lblGalleryEmpty.setText(
+                            "No media files found.\nCapture images or record videos to see them here."
+                        )
+                        self.ui.lblGalleryEmpty.show()
+                        print("[GALLERY] No media files - showing empty message")
+                    except RuntimeError as e:
+                        print(f"[GALLERY] Warning: Could not update empty label: {e}")
+                    return
+                else:
+                    try:
+                        self.ui.lblGalleryEmpty.hide()
+                    except RuntimeError:
+                        pass  # Label might have been deleted
+
+            # Add media items to gallery
+            items_per_row = 4
+            for idx, (file_path, file_type) in enumerate(media_files):
+                row = idx // items_per_row
+                col = idx % items_per_row
+
+                # Create gallery item frame
+                frame = QFrame()
+                frame.setMinimumSize(250, 200)
+                frame.setMaximumSize(250, 200)
+                frame.setObjectName(f"gallery_item_frame_{idx}")
+                frame.setStyleSheet(
+                    """
+                    QFrame {
+                        background-color: #1a1a1a;
+                        border: 1px solid #2a2a2a;
+                        border-radius: 8px;
+                    }
+                    QFrame:hover {
+                        border: 1px solid #FF8800;
+                        background-color: #252525;
+                    }
+                """
+                )
+
+                layout = QVBoxLayout(frame)
+                layout.setContentsMargins(8, 8, 8, 8)
+                layout.setSpacing(8)
+
+                # Create preview label
+                preview_label = QLabel()
+                preview_label.setMinimumSize(234, 150)
+                preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                preview_label.setStyleSheet(
+                    "background-color: #0a0a0a; border-radius: 4px;"
+                )
+
+                if file_type == "image":
+                    # Load and display image thumbnail
+                    try:
+                        pixmap = QPixmap(str(file_path))
+                        if not pixmap.isNull():
+                            scaled_pixmap = pixmap.scaled(
+                                234,
+                                150,
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            preview_label.setPixmap(scaled_pixmap)
+                            print(f"[GALLERY] Loaded image thumbnail: {file_path.name}")
+                        else:
+                            preview_label.setText("📷 Image")
+                            print(f"[GALLERY] Failed to load image: {file_path.name}")
+                    except Exception as img_err:
+                        print(
+                            f"[GALLERY] Error loading image {file_path.name}: {img_err}"
+                        )
+                        preview_label.setText("📷 Image")
+                else:
+                    # Video placeholder
+                    preview_label.setText("🎥 Video")
+                    preview_label.setStyleSheet(
+                        """
+                        background-color: #0a0a0a; 
+                        border-radius: 4px;
+                        color: #FF8800;
+                        font-size: 24pt;
+                    """
+                    )
+
+                layout.addWidget(preview_label)
+
+                # Create title label with filename
+                title_label = QLabel(file_path.name)
+                title_label.setStyleSheet("color: #ffffff; font-size: 9pt;")
+                title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                title_label.setWordWrap(True)
+                layout.addWidget(title_label)
+
+                # Make frame clickable to open file
+                frame.mousePressEvent = (
+                    lambda event, path=file_path: self.open_media_file(path)
+                )
+
+                # Add to grid
+                gallery_grid.addWidget(frame, row, col)
+                print(
+                    f"[GALLERY] Added item {idx}: {file_path.name} at row={row}, col={col}"
+                )
+
+            print(f"[GALLERY] [OK] Loaded {len(media_files)} media files successfully")
+
+        except Exception as e:
+            print(f"[GALLERY] [ERR] Failed to load gallery: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def open_media_file(self, file_path):
+        """Open media file with default system application."""
+        try:
+            import os
+            import platform
+
+            if platform.system() == "Windows":
+                os.startfile(file_path)
+            elif platform.system() == "Darwin":  # macOS
+                os.system(f'open "{file_path}"')
+            else:  # Linux
+                os.system(f'xdg-open "{file_path}"')
+
+            print(f"[GALLERY] Opening: {file_path.name}")
+        except Exception as e:
+            print(f"[GALLERY] [ERR] Failed to open file: {e}")
+
     def _write_recording_frame(self):
-        """Write frame to video during recording."""
+        """Write frame to video during recording from main camera (port 8080)."""
         if not self.media_manager.is_recording():
             return
 
         try:
-            camera = self.camera_manager.camera1
+            # Use camera0 (port 8080) - the main camera feed
+            camera = self.camera_manager.camera0
             frame = camera.get_frame()
             if frame is not None:
                 self.media_manager.write_frame(frame)

@@ -762,6 +762,53 @@ class PixhawkConnection:
             print(f"[PIXHAWK] ❌ Auto-reconnect failed: {e}")
             self.connected = False
 
+    def get_attitude(self) -> dict:
+        """
+        Get current vehicle attitude (orientation) data.
+
+        Returns:
+            Dictionary with attitude information:
+            - heading (float): Heading in degrees (0-360)
+            - pitch (float): Pitch angle in degrees
+            - roll (float): Roll angle in degrees
+            - connected (bool): True if data retrieved successfully
+
+        Note:
+            Returns default values (0.0) if not connected or no data available.
+        """
+        import math
+
+        if not self.connected or not self.vehicle:
+            return {"connected": False, "heading": 0.0, "pitch": 0.0, "roll": 0.0}
+
+        try:
+            # Try to receive ATTITUDE message (non-blocking)
+            msg = self.vehicle.recv_match(type="ATTITUDE", blocking=False, timeout=0.1)
+
+            if msg:
+                # Convert radians to degrees
+                roll_deg = math.degrees(msg.roll)
+                pitch_deg = math.degrees(msg.pitch)
+                yaw_rad = msg.yaw
+
+                # Convert yaw from radians to degrees and normalize to 0-360
+                heading_deg = math.degrees(yaw_rad)
+                if heading_deg < 0:
+                    heading_deg += 360
+
+                return {
+                    "connected": True,
+                    "heading": heading_deg,
+                    "pitch": pitch_deg,
+                    "roll": roll_deg,
+                }
+            else:
+                # No message available, return last known values or defaults
+                return {"connected": True, "heading": 0.0, "pitch": 0.0, "roll": 0.0}
+        except Exception as e:
+            print(f"[ATTITUDE] Error getting attitude data: {e}")
+            return {"connected": False, "heading": 0.0, "pitch": 0.0, "roll": 0.0}
+
     def get_status(self) -> dict:
         """
         Get current vehicle status and connection information.

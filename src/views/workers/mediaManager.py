@@ -3,15 +3,13 @@ Media Manager Module
 Handles camera capture and video recording functionality
 """
 
-import os
 import cv2
-import numpy as np
 from datetime import datetime
 from pathlib import Path
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
 
-class MediaManager(QThread):
+class MediaManager(QObject):
     """
     Manages image capture and video recording from camera frames
     """
@@ -39,7 +37,7 @@ class MediaManager(QThread):
             self.videos_dir.mkdir(parents=True, exist_ok=True)
             print(f"[MEDIA] Media directories initialized: {self.media_dir}")
         except Exception as e:
-            print(f"[MEDIA] [ERR] Failed to create directories: {e}")
+            print(f"[MEDIA] ERROR: Failed to create directories: {e}")
 
     def capture_image(self, frame, camera_id=0):
         """
@@ -51,7 +49,7 @@ class MediaManager(QThread):
             Path to saved image or None if failed
         """
         if frame is None:
-            print("[MEDIA] [ERR] Invalid frame for capture")
+            print("[MEDIA] ERROR: Invalid frame for capture")
             return None
 
         try:
@@ -60,15 +58,15 @@ class MediaManager(QThread):
             filepath = self.images_dir / filename
 
             cv2.imwrite(str(filepath), frame)
-            print(f"[MEDIA] [OK] Image captured: {filename}")
+            print(f"[MEDIA] Image captured: {filename}")
             self.capture_complete.emit(str(filepath))
             return str(filepath)
 
         except Exception as e:
-            print(f"[MEDIA] [ERR] Failed to capture image: {e}")
+            print(f"[MEDIA] ERROR: Failed to capture image: {e}")
             return None
 
-    def start_recording(self, frame_width=640, frame_height=480, fps=30, camera_id=0):
+    def start_recording(self, frame_width=1920, frame_height=1080, fps=30, camera_id=0):
         """
         Start video recording
         Args:
@@ -80,7 +78,7 @@ class MediaManager(QThread):
             True if recording started, False otherwise
         """
         if self.recording:
-            print("[MEDIA]  Recording already in progress")
+            print("[MEDIA] Recording already in progress")
             return False
 
         try:
@@ -94,17 +92,17 @@ class MediaManager(QThread):
             )
 
             if not self.video_writer.isOpened():
-                print("[MEDIA] [ERR] Failed to open video writer")
+                print("[MEDIA] ERROR: Failed to open video writer")
                 self.video_writer = None
                 return False
 
             self.recording = True
             self.recording_status.emit(True)
-            print(f"[MEDIA] [OK] Recording started: {filename}")
+            print(f"[MEDIA] Recording started: {filename}")
             return True
 
         except Exception as e:
-            print(f"[MEDIA] [ERR] Failed to start recording: {e}")
+            print(f"[MEDIA] ERROR: Failed to start recording: {e}")
             self.recording = False
             self.recording_status.emit(False)
             return False
@@ -124,7 +122,7 @@ class MediaManager(QThread):
             self.video_writer.write(frame)
             return True
         except Exception as e:
-            print(f"[MEDIA] [ERR] Failed to write frame: {e}")
+            print(f"[MEDIA] ERROR: Failed to write frame: {e}")
             return False
 
     def stop_recording(self):
@@ -134,7 +132,7 @@ class MediaManager(QThread):
             Path to saved video or None if failed
         """
         if not self.recording or self.video_writer is None:
-            print("[MEDIA]  No recording in progress")
+            print("[MEDIA] No recording in progress")
             return None
 
         try:
@@ -146,18 +144,18 @@ class MediaManager(QThread):
             if self.current_video_path and self.current_video_path.exists():
                 file_size = self.current_video_path.stat().st_size / (1024 * 1024)
                 print(
-                    f"[MEDIA] [OK] Recording stopped: {self.current_video_path.name} ({file_size:.2f} MB)"
+                    f"[MEDIA] Recording stopped: {self.current_video_path.name} ({file_size:.2f} MB)"
                 )
                 self.capture_complete.emit(str(self.current_video_path))
                 path = str(self.current_video_path)
                 self.current_video_path = None
                 return path
             else:
-                print("[MEDIA] [ERR] Video file not found after recording")
+                print("[MEDIA] ERROR: Video file not found after recording")
                 return None
 
         except Exception as e:
-            print(f"[MEDIA] [ERR] Failed to stop recording: {e}")
+            print(f"[MEDIA] ERROR: Failed to stop recording: {e}")
             self.recording = False
             self.recording_status.emit(False)
             return None
@@ -170,11 +168,7 @@ class MediaManager(QThread):
         """Get the root media directory path"""
         return str(self.media_dir)
 
-    def run(self):
-        """Thread run method (if needed for async operations)"""
-        pass
-
-    def stop(self):
+    def cleanup(self):
         """Cleanup on shutdown"""
         if self.recording:
             self.stop_recording()
