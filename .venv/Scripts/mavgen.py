@@ -1,4 +1,4 @@
-#!F:\UIU MARINER SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
+#!F:\UIU UNDERWATER ROBOTICS SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
 
 '''
 parse a MAVLink protocol XML file and generate a python implementation

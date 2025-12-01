@@ -24,6 +24,9 @@ pygame>=2.5.2
 # GUI framework (Professional interface)
 PyQt6>=6.6.0
 
+# QML interface (alternative to PyQt6 - for modern declarative UI)
+PySide6>=6.6.0  # Qt for Python with QML support
+
 # Computer vision and image processing
 opencv-python>=4.8.0       # Camera display and object detection
 numpy>=1.24.0              # Array operations for OpenCV
@@ -65,5 +68,4 @@ python-dotenv>=1.0.0
 # ============================================================
 # Requires: Python 3.8 or higher
 # Tested with: Python 3.11.0
-#
-# Check your version: python --version
+

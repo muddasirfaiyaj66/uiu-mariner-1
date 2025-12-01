@@ -1,4 +1,4 @@
-#!F:\UIU MARINER SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
+#!F:\UIU UNDERWATER ROBOTICS SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
 
 '''
 Summarize MAVLink logs. Useful for identifying which log is of interest in a large set.

@@ -1,4 +1,4 @@
-#!F:\UIU MARINER SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
+#!F:\UIU UNDERWATER ROBOTICS SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
 
 '''
 example program that dumps a Mavlink log file. The log file is

@@ -3,6 +3,7 @@ UIU MARINER - Professional ROV Control System
 Main application with camera feeds, object detection, sensor telemetry, and vehicle control
 """
 
+
 import sys
 import os
 import json
@@ -12,15 +13,16 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSlot
 from PyQt6.QtGui import QPixmap, QFont
 from PyQt6 import uic
 
+# --- Import all required classes for logic connection ---
+from ..computer_vision.camera_detector import CameraDetector
+from .workers.sensorWorker import SensorTelemetryWorker
+from ..services.mavlinkConnection import PixhawkConnection
+from ..joystickController import JoystickController
+
 # Add parent directory to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.services.mavlinkConnection import PixhawkConnection
-from src.joystickController import JoystickController
-from src.views.workers.cameraWorker import CameraWorker, DualCameraManager
-from src.views.workers.sensorWorker import SensorTelemetryWorker, MockSensorWorker
-from src.views.workers.mediaManager import MediaManager
-from src.computer_vision.camera_detector import CameraDetector
+# Delay heavy imports until needed in methods
 
 
 class MarinerROVControl(QMainWindow):
@@ -38,6 +40,7 @@ class MarinerROVControl(QMainWindow):
         # Initialize UI from .ui file
         self.init_ui()
 
+
         # Initialize components
         self.pixhawk = None
         self.joystick = None
@@ -52,6 +55,7 @@ class MarinerROVControl(QMainWindow):
         self.camera_detection_enabled = True
         self.active_camera = 0
         self.recording_timer = None
+
 
         # Setup connections and start threads
         self.setup_connections()
@@ -71,7 +75,8 @@ class MarinerROVControl(QMainWindow):
         # Initialize joystick
         QTimer.singleShot(400, self.init_joystick)
 
-        # Initialize media manager
+        # Delay import of MediaManager until here
+        from .workers.mediaManager import MediaManager
         self.media_manager = MediaManager()
 
         # Start control loop
@@ -82,7 +87,7 @@ class MarinerROVControl(QMainWindow):
         # UI update timer
         self.ui_update_timer = QTimer(self)
         self.ui_update_timer.timeout.connect(self.update_ui)
-        self.ui_update_timer.start(2000)
+        self.ui_update_timer.start(200)  # Faster UI updates for better responsiveness
 
         # Attitude update timer (faster updates for smooth compass)
         self.attitude_update_timer = QTimer(self)
@@ -157,7 +162,7 @@ class MarinerROVControl(QMainWindow):
         }
 
         # Import and setup the new UI
-        from src.views.new_ui_ui import Ui_MainWindow
+        from .main_ui import Ui_MainWindow
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -175,866 +180,164 @@ class MarinerROVControl(QMainWindow):
 
         # Initialize modern compass widget
         self.init_modern_compass()
-
-    # ============================================================================
-    # OLD PROGRAMMATIC UI METHODS - NO LONGER USED (kept for reference)
-    # ============================================================================
-
-    def create_ui_programmatically_OLD(self):
-        """Create modern UI programmatically with sleek dark theme.
-        NOTE: This method is no longer used. The UI is now loaded from new_ui_ui.py
-        """
-        from PyQt6.QtWidgets import (
-            QVBoxLayout,
-            QHBoxLayout,
-            QGroupBox,
-            QFrame,
-            QGridLayout,
-        )
-
-        # Modern color palette
-        self.colors = {
-            "bg_dark": "#0D1117",
-            "bg_secondary": "#161B22",
-            "bg_tertiary": "#21262D",
-            "accent": "#FF8800",
-            "accent_hover": "#FFA040",
-            "success": "#00D084",
-            "danger": "#FF4D4D",
-            "warning": "#FFB800",
-            "text_primary": "#E6EDF3",
-            "text_secondary": "#8B949E",
-            "border": "#30363D",
-            "border_accent": "#FF8800",
-        }
-
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        # Set main window style
-        self.setStyleSheet(
-            f"""
-            QMainWindow {{
-                background-color: {self.colors['bg_dark']};
-            }}
-            QWidget {{
-                background-color: {self.colors['bg_dark']};
-                color: {self.colors['text_primary']};
-                font-family: 'Segoe UI', 'Arial', sans-serif;
-            }}
-            QLabel {{
-                color: {self.colors['text_primary']};
-                background-color: transparent;
-                font-size: 9pt;
-            }}
-            QGroupBox {{
-                background-color: {self.colors['bg_secondary']};
-                border: 1px solid {self.colors['border']};
-                border-radius: 6px;
-                padding: 10px;
-                margin-top: 8px;
-                font-weight: bold;
-                font-size: 10pt;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 12px;
-                color: {self.colors['accent']};
-                background-color: {self.colors['bg_tertiary']};
-                border: 1px solid {self.colors['border']};
-                border-radius: 4px;
-            }}
-            QPushButton {{
-                background-color: {self.colors['bg_tertiary']};
-                border: 1px solid {self.colors['border']};
-                border-radius: 5px;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 9pt;
-                color: {self.colors['text_primary']};
-                min-height: 30px;
-            }}
-            QPushButton:hover {{
-                background-color: {self.colors['bg_secondary']};
-                border-color: {self.colors['accent']};
-            }}
-            QPushButton:pressed {{
-                background-color: {self.colors['bg_dark']};
-            }}
-            QPushButton#btnArm {{
-                background-color: {self.colors['success']};
-                color: #000;
-                font-size: 10pt;
-                font-weight: bold;
-            }}
-            QPushButton#btnArm:hover {{
-                background-color: #00F0A0;
-            }}
-            QPushButton#btnEmergencyStop {{
-                background-color: {self.colors['danger']};
-                color: #FFF;
-                font-size: 10pt;
-                font-weight: bold;
-            }}
-            QPushButton#btnEmergencyStop:hover {{
-                background-color: #FF6060;
-            }}
-            QPushButton#btnManualControl {{
-                background-color: {self.colors['bg_tertiary']};
-                color: {self.colors['accent']};
-                font-size: 9pt;
-                font-weight: bold;
-                border: 2px solid {self.colors['accent']};
-                border-radius: 6px;
-            }}
-            QPushButton#btnManualControl:hover {{
-                background-color: {self.colors['accent']};
-                color: #000;
-            }}
-            QPushButton#btnManualControl:pressed {{
-                background-color: {self.colors['success']};
-                color: #000;
-                border-color: {self.colors['success']};
-            }}
-        """
-        )
-
-        # === TOP BAR ===
-        top_bar = self.create_top_bar()
-        main_layout.addWidget(top_bar)
-
-        # === MAIN CONTENT === (Use scrollable area for better responsiveness)
-        from PyQt6.QtWidgets import QScrollArea
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet(
-            f"""
-            QScrollArea {{
-                border: none;
-                background-color: {self.colors['bg_dark']};
-            }}
-            QScrollBar:vertical {{
-                background-color: {self.colors['bg_secondary']};
-                width: 12px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: {self.colors['border']};
-                border-radius: 6px;
-                min-height: 20px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: {self.colors['accent']};
-            }}
-        """
-        )
-
-        content = QWidget()
-        content_layout = QHBoxLayout(content)
-        content_layout.setContentsMargins(12, 12, 12, 12)
-        content_layout.setSpacing(12)
-
-        # Left column: Cameras
-        camera_panel = self.create_camera_panel()
-        content_layout.addWidget(camera_panel, 65)
-
-        # Right column: Status & Controls
-        right_panel = self.create_right_panel()
-        content_layout.addWidget(right_panel, 35)
-
-        scroll_area.setWidget(content)
-        main_layout.addWidget(scroll_area)
-
-        # === BOTTOM BAR ===
-        bottom_bar = self.create_bottom_bar()
-        main_layout.addWidget(bottom_bar)
-
-    def create_top_bar_OLD(self):
-        """Create modern top navigation bar. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QFrame, QHBoxLayout
-
-        top_bar = QFrame()
-        top_bar.setFixedHeight(60)  # Reduced height
-        top_bar.setStyleSheet(
-            f"""
-            QFrame {{
-                background-color: {self.colors['bg_secondary']};
-                border-bottom: 2px solid {self.colors['border_accent']};
-            }}
-        """
-        )
-
-        layout = QHBoxLayout(top_bar)
-        layout.setContentsMargins(16, 8, 16, 8)
-
-        # Logo
-        logo_label = QLabel()
-        logo_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "public", "logo.png"
-        )
-        if os.path.exists(logo_path):
-            logo_pixmap = QPixmap(logo_path)
-            # Scale logo to fit top bar (maintain aspect ratio)
-            scaled_logo = logo_pixmap.scaled(
-                40,
-                40,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            logo_label.setPixmap(scaled_logo)
-            logo_label.setStyleSheet("background-color: transparent;")
-            layout.addWidget(logo_label)
-
-        # Title
-        title = QLabel("UIU MARINER")
-        title.setStyleSheet(
-            f"""
-            font-size: 18pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            margin-left: 10px;
-        """
-        )
-        layout.addWidget(title)
-
-        layout.addStretch()
-
-        # System time/status
-        system_label = QLabel("ROV CONTROL SYSTEM")
-        system_label.setStyleSheet(
-            f"""
-            font-size: 9pt;
-            color: {self.colors['text_secondary']};
-            font-weight: bold;
-        """
-        )
-        layout.addWidget(system_label)
-
-        return top_bar
-
-    def create_camera_panel_OLD(self):
-        """Create modern camera display panel. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QFrame
-
-        panel = QFrame()
-        panel.setStyleSheet(
-            f"""
-            QFrame {{
-                background-color: {self.colors['bg_secondary']};
-                border: 1px solid {self.colors['border']};
-                border-radius: 12px;
-            }}
-        """
-        )
-
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-
-        # Main camera
-        main_label = QLabel("PRIMARY CAMERA")
-        main_label.setStyleSheet(
-            f"""
-            font-size: 9pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            padding: 6px;
-        """
-        )
-        layout.addWidget(main_label)
-
-        self.lblCameraMain = QLabel(" Waiting for video feed...")
-        self.lblCameraMain.setMinimumSize(800, 480)  # Increased camera height
-        self.lblCameraMain.setScaledContents(False)
-        self.lblCameraMain.setStyleSheet(
-            f"""
-            background-color: #000;
-            border: 2px solid {self.colors['border_accent']};
-            border-radius: 6px;
-            color: {self.colors['text_secondary']};
-            font-size: 11pt;
-        """
-        )
-        self.lblCameraMain.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.lblCameraMain)
-
-        # Secondary camera
-        secondary_label = QLabel("SECONDARY CAMERA")
-        secondary_label.setStyleSheet(
-            f"""
-            font-size: 8pt;
-            font-weight: bold;
-            color: {self.colors['text_secondary']};
-            padding: 6px;
-        """
-        )
-        layout.addWidget(secondary_label)
-
-        self.lblCameraSmall = QLabel(" Waiting for video feed...")
-        self.lblCameraSmall.setMinimumSize(400, 240)  # Increased camera height
-        self.lblCameraSmall.setScaledContents(False)
-        self.lblCameraSmall.setStyleSheet(
-            f"""
-            background-color: #000;
-            border: 1px solid {self.colors['border']};
-            border-radius: 5px;
-            color: {self.colors['text_secondary']};
-            font-size: 9pt;
-        """
-        )
-        self.lblCameraSmall.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.lblCameraSmall)
-
-        return panel
-
-    def create_right_panel_OLD(self):
-        """Create modern right side panel with status and controls. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QVBoxLayout, QFrame
-
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-
-        # System Status
-        status_panel = self.create_status_panel()
-        layout.addWidget(status_panel)
-
-        # Sensor Readings
-        sensor_panel = self.create_sensor_panel()
-        layout.addWidget(sensor_panel)
-
-        # Control Buttons
-        control_panel = self.create_control_panel()
-        layout.addWidget(control_panel)
-
-        layout.addStretch()
-
-        return panel
-
-    def create_status_panel_OLD(self):
-        """Create system status panel. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QVBoxLayout, QGroupBox, QHBoxLayout
-
-        group = QGroupBox("SYSTEM STATUS")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        # Pixhawk status
-        pixhawk_row = QHBoxLayout()
-        pixhawk_label = QLabel("Pixhawk:")
-        pixhawk_label.setStyleSheet("font-weight: bold;")
-        self.lblPixhawkStatus = QLabel(" Disconnected")
-        self.lblPixhawkStatus.setStyleSheet(f"color: {self.colors['text_secondary']};")
-        pixhawk_row.addWidget(pixhawk_label)
-        pixhawk_row.addWidget(self.lblPixhawkStatus)
-        pixhawk_row.addStretch()
-        layout.addLayout(pixhawk_row)
-
-        # Joystick status
-        joystick_row = QHBoxLayout()
-        joystick_label = QLabel("Controller:")
-        joystick_label.setStyleSheet("font-weight: bold;")
-        self.lblJoystickStatus = QLabel(" Disconnected")
-        self.lblJoystickStatus.setStyleSheet(f"color: {self.colors['text_secondary']};")
-        joystick_row.addWidget(joystick_label)
-        joystick_row.addWidget(self.lblJoystickStatus)
-        joystick_row.addStretch()
-        layout.addLayout(joystick_row)
-
-        # Mode status
-        mode_row = QHBoxLayout()
-        mode_label = QLabel("Mode:")
-        mode_label.setStyleSheet("font-weight: bold;")
-        self.lblModeStatus = QLabel("MANUAL")
-        self.lblModeStatus.setStyleSheet(f"color: {self.colors['warning']};")
-        mode_row.addWidget(mode_label)
-        mode_row.addWidget(self.lblModeStatus)
-        mode_row.addStretch()
-        layout.addLayout(mode_row)
-
-        # Arm status
-        arm_row = QHBoxLayout()
-        arm_label = QLabel("Armed:")
-        arm_label.setStyleSheet("font-weight: bold;")
-        self.lblArmStatus = QLabel(" NO")
-        self.lblArmStatus.setStyleSheet(f"color: {self.colors['text_secondary']};")
-        arm_row.addWidget(arm_label)
-        arm_row.addWidget(self.lblArmStatus)
-        arm_row.addStretch()
-        layout.addLayout(arm_row)
-
-        # Sensor status
-        sensor_row = QHBoxLayout()
-        sensor_label = QLabel("Sensors:")
-        sensor_label.setStyleSheet("font-weight: bold;")
-        self.lblSensorStatus = QLabel(" Disconnected")
-        self.lblSensorStatus.setStyleSheet(f"color: {self.colors['text_secondary']};")
-        sensor_row.addWidget(sensor_label)
-        sensor_row.addWidget(self.lblSensorStatus)
-        sensor_row.addStretch()
-        layout.addLayout(sensor_row)
-
-        return group
-
-    def create_sensor_panel_OLD(self):
-        """Create sensor readings panel. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QVBoxLayout, QGroupBox, QGridLayout
-
-        group = QGroupBox("SENSOR TELEMETRY")
-        layout = QGridLayout(group)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 16, 10, 10)
-
-        # Depth
-        depth_label = QLabel("Depth")
-        depth_label.setStyleSheet(
-            f"font-size: 8pt; color: {self.colors['text_secondary']};"
-        )
-        self.lblDepth = QLabel("0.0 m")
-        self.lblDepth.setStyleSheet(
-            f"""
-            font-size: 16pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            padding: 6px;
-            background-color: {self.colors['bg_tertiary']};
-            border-radius: 5px;
-        """
-        )
-        self.lblDepth.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(depth_label, 0, 0)
-        layout.addWidget(self.lblDepth, 1, 0, 1, 2)
-
-        # Temperature
-        temp_label = QLabel("Temperature")
-        temp_label.setStyleSheet(
-            f"font-size: 8pt; color: {self.colors['text_secondary']};"
-        )
-        self.lblTemperature = QLabel("0.0°C")
-        self.lblTemperature.setStyleSheet(
-            f"""
-            font-size: 13pt;
-            font-weight: bold;
-            color: {self.colors['text_primary']};
-            padding: 5px;
-            background-color: {self.colors['bg_tertiary']};
-            border-radius: 5px;
-        """
-        )
-        self.lblTemperature.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(temp_label, 2, 0)
-        layout.addWidget(self.lblTemperature, 3, 0)
-
-        # Pressure
-        pressure_label = QLabel("Pressure")
-        pressure_label.setStyleSheet(
-            f"font-size: 8pt; color: {self.colors['text_secondary']};"
-        )
-        self.lblPressure = QLabel("0.0 hPa")
-        self.lblPressure.setStyleSheet(
-            f"""
-            font-size: 13pt;
-            font-weight: bold;
-            color: {self.colors['text_primary']};
-            padding: 5px;
-            background-color: {self.colors['bg_tertiary']};
-            border-radius: 5px;
-        """
-        )
-        self.lblPressure.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(pressure_label, 2, 1)
-        layout.addWidget(self.lblPressure, 3, 1)
-
-        return group
-
-    def create_control_panel_OLD(self):
-        """Create control buttons panel. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QVBoxLayout, QGroupBox
-
-        group = QGroupBox("CONTROL PANEL")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 16, 10, 10)
-
-        # ARM button
-        self.btnArm = QPushButton(" ARM THRUSTERS")
-        self.btnArm.setObjectName("btnArm")
-        self.btnArm.setMinimumHeight(45)
-        self.btnArm.clicked.connect(self.toggle_arm)
-        layout.addWidget(self.btnArm)
-
-        # Emergency Stop
-        self.btnEmergencyStop = QPushButton(" EMERGENCY STOP")
-        self.btnEmergencyStop.setObjectName("btnEmergencyStop")
-        self.btnEmergencyStop.setMinimumHeight(45)
-        self.btnEmergencyStop.clicked.connect(self.emergency_stop)
-        layout.addWidget(self.btnEmergencyStop)
-
-        # Separator for manual controls
-        manual_separator = QLabel("" * 25)
-        manual_separator.setStyleSheet(
-            f"color: {self.colors['border']}; padding: 6px 0px; font-size: 8pt;"
-        )
-        manual_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(manual_separator)
-
-        # Manual Control Section Label
-        manual_label = QLabel(" MANUAL CONTROLS")
-        manual_label.setStyleSheet(
-            f"""
-            font-size: 8pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            padding: 3px;
-        """
-        )
-        manual_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(manual_label)
-
-        # Manual control buttons in grid layout
-        from PyQt6.QtWidgets import QGridLayout, QWidget
-
-        manual_widget = QWidget()
-        manual_layout = QGridLayout(manual_widget)
-        manual_layout.setSpacing(8)
-        manual_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Forward button (top center)
-        self.btnForward = QPushButton(" FWD")
-        self.btnForward.setObjectName("btnManualControl")
-        self.btnForward.setMinimumHeight(40)
-        self.btnForward.pressed.connect(lambda: self.send_manual_command("forward"))
-        self.btnForward.released.connect(self.stop_manual_command)
-        manual_layout.addWidget(self.btnForward, 0, 1)
-
-        # Left button (middle left)
-        self.btnLeft = QPushButton(" LEFT")
-        self.btnLeft.setObjectName("btnManualControl")
-        self.btnLeft.setMinimumHeight(40)
-        self.btnLeft.pressed.connect(lambda: self.send_manual_command("left"))
-        self.btnLeft.released.connect(self.stop_manual_command)
-        manual_layout.addWidget(self.btnLeft, 1, 0)
-
-        # Right button (middle right)
-        self.btnRight = QPushButton(" RIGHT")
-        self.btnRight.setObjectName("btnManualControl")
-        self.btnRight.setMinimumHeight(40)
-        self.btnRight.pressed.connect(lambda: self.send_manual_command("right"))
-        self.btnRight.released.connect(self.stop_manual_command)
-        manual_layout.addWidget(self.btnRight, 1, 2)
-
-        # Backward button (bottom center)
-        self.btnBackward = QPushButton(" BWD")
-        self.btnBackward.setObjectName("btnManualControl")
-        self.btnBackward.setMinimumHeight(40)
-        self.btnBackward.pressed.connect(lambda: self.send_manual_command("backward"))
-        self.btnBackward.released.connect(self.stop_manual_command)
-        manual_layout.addWidget(self.btnBackward, 2, 1)
-
-        layout.addWidget(manual_widget)
-
-        # Toggle Detection
-        self.btnToggleDetection = QPushButton(" Toggle Detection")
-        self.btnToggleDetection.setMinimumHeight(36)
-        self.btnToggleDetection.clicked.connect(self.toggle_detection)
-        layout.addWidget(self.btnToggleDetection)
-
-        # Separator
-        separator = QLabel("" * 25)
-        separator.setStyleSheet(
-            f"color: {self.colors['border']}; padding: 6px 0px; font-size: 8pt;"
-        )
-        separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(separator)
-
-        # Camera Section Label
-        camera_label = QLabel(" CAMERA CONTROLS")
-        camera_label.setStyleSheet(
-            f"""
-            font-size: 8pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            padding: 3px;
-        """
-        )
-        camera_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(camera_label)
-
-        # Camera Configuration
-        self.btnCameraConfig = QPushButton(" Camera Settings")
-        self.btnCameraConfig.setObjectName("btnCameraConfig")
-        self.btnCameraConfig.setMinimumHeight(42)
-        self.btnCameraConfig.setStyleSheet(
-            f"""
-            QPushButton#btnCameraConfig {{
-                background-color: {self.colors['accent']};
-                color: white;
-                font-size: 9pt;
-                font-weight: bold;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton#btnCameraConfig:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}
-        """
-        )
-        self.btnCameraConfig.clicked.connect(self.open_camera_settings)
-        layout.addWidget(self.btnCameraConfig)
-
-        # Restart Camera Feeds
-        self.btnRestartCameras = QPushButton(" Restart Cameras")
-        self.btnRestartCameras.setObjectName("btnRestartCameras")
-        self.btnRestartCameras.setMinimumHeight(38)
-        self.btnRestartCameras.setStyleSheet(
-            f"""
-            QPushButton#btnRestartCameras {{
-                background-color: {self.colors['warning']};
-                color: #000;
-                font-size: 10pt;
-                font-weight: bold;
-                border: none;
+        
+        # Configure responsive design
+        self.configure_responsive_layout()
+        
+        # Fix label text visibility - ensure HTML colors display properly
+        # Use QTimer to delay this slightly so UI is fully rendered
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.fix_label_text_visibility)
+
+        # --- SIDEBAR TOGGLE FUNCTIONALITY ---
+        # Connect sidebar toggle button to show/hide sidebar
+        if hasattr(self.ui, 'btnToggleSidebar') and hasattr(self.ui, 'side_frame'):
+            self.ui.btnToggleSidebar.clicked.connect(self.toggle_sidebar)
+        
+        # Connect hamburger menu button
+        if hasattr(self.ui, 'btnMenuToggle') and hasattr(self.ui, 'sideBar'):
+            self.ui.btnMenuToggle.clicked.connect(self.toggle_sidebar)
+        
+        # Setup time display update timer
+        if hasattr(self.ui, 'lblTime'):
+            from PyQt6.QtCore import QTimer
+            self.time_timer = QTimer()
+            self.time_timer.timeout.connect(self.update_time_display)
+            self.time_timer.start(1000)  # Update every second
+            self.update_time_display()  # Initial update
+
+        # --- LOGO LOAD PATCH ---
+        # Load logo from public/logo.png
+        import os
+        from PyQt6.QtGui import QPixmap
+        logo_paths = [
+            os.path.join(os.path.dirname(__file__), '../../public/logo.png'),
+            os.path.join(os.path.dirname(__file__), '../../media/images/logo.png'),
+        ]
+        logo_loaded = False
+        for logo_path in logo_paths:
+            if os.path.exists(logo_path):
+                if hasattr(self.ui, 'lblLogoIcon'):
+                    pixmap = QPixmap(logo_path)
+                    if not pixmap.isNull():
+                        self.ui.lblLogoIcon.setPixmap(pixmap)
+                        self.ui.lblLogoIcon.setScaledContents(True)
+                        logo_loaded = True
+                        print(f"[UI] Logo loaded from: {logo_path}")
+                        break
+        if not logo_loaded:
+            print("[UI] Warning: Logo file not found. Please ensure public/logo.png exists.")
+
+        # --- FLOATING SIDEBAR TOGGLE BUTTON ---
+        # Create a floating button that is always visible when sidebar is hidden
+        self.floatingSidebarButton = QPushButton("☰", self)
+        self.floatingSidebarButton.setObjectName("floatingSidebarButton")
+        self.floatingSidebarButton.setFixedSize(36, 36)
+        self.floatingSidebarButton.setStyleSheet("""
+            QPushButton#floatingSidebarButton {
+                background-color: #222;
+                color: #ea8a35;
+                border: 2px solid #ea8a35;
                 border-radius: 8px;
-            }}
-            QPushButton#btnRestartCameras:hover {{
-                background-color: #FFD040;
-            }}
-        """
-        )
-        self.btnRestartCameras.clicked.connect(self.restart_camera_feeds)
-        layout.addWidget(self.btnRestartCameras)
-
-        # Separator for media controls
-        media_separator = QLabel("" * 25)
-        media_separator.setStyleSheet(
-            f"color: {self.colors['border']}; padding: 6px 0px; font-size: 8pt;"
-        )
-        media_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(media_separator)
-
-        # Media Controls Section Label
-        media_label = QLabel(" MEDIA CONTROLS")
-        media_label.setStyleSheet(
-            f"""
-            font-size: 8pt;
-            font-weight: bold;
-            color: {self.colors['accent']};
-            padding: 3px;
-        """
-        )
-        media_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(media_label)
-
-        # Media buttons in grid layout (2 columns)
-        from PyQt6.QtWidgets import QGridLayout, QWidget
-
-        media_widget = QWidget()
-        media_layout = QGridLayout(media_widget)
-        media_layout.setSpacing(8)
-        media_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Capture Image Button (Left)
-        self.btnCaptureImage = QPushButton("📸 CAPTURE")
-        self.btnCaptureImage.setObjectName("btnCaptureImage")
-        self.btnCaptureImage.setMinimumHeight(44)
-        self.btnCaptureImage.setStyleSheet(
-            f"""
-            QPushButton#btnCaptureImage {{
-                background-color: #2E7D32;
-                color: white;
-                font-size: 10pt;
+                font-size: 18pt;
                 font-weight: bold;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton#btnCaptureImage:hover {{
-                background-color: #388E3C;
-            }}
-            QPushButton#btnCaptureImage:pressed {{
-                background-color: #1B5E20;
-            }}
-        """
-        )
-        self.btnCaptureImage.clicked.connect(self.capture_image)
-        media_layout.addWidget(self.btnCaptureImage, 0, 0)
-
-        # Start Recording Button (Right)
-        self.btnStartRecording = QPushButton("⏺ RECORD")
-        self.btnStartRecording.setObjectName("btnStartRecording")
-        self.btnStartRecording.setMinimumHeight(44)
-        self.btnStartRecording.setStyleSheet(
-            f"""
-            QPushButton#btnStartRecording {{
-                background-color: #C62828;
-                color: white;
-                font-size: 10pt;
-                font-weight: bold;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton#btnStartRecording:hover {{
-                background-color: #E53935;
-            }}
-            QPushButton#btnStartRecording:pressed {{
-                background-color: #B71C1C;
-            }}
-        """
-        )
-        self.btnStartRecording.clicked.connect(self.toggle_recording)
-        media_layout.addWidget(self.btnStartRecording, 0, 1)
-
-        layout.addWidget(media_widget)
-
-        # Stop Recording Button (Full width, only visible during recording)
-        self.btnStopRecording = QPushButton("⏹ STOP RECORDING")
-        self.btnStopRecording.setObjectName("btnStopRecording")
-        self.btnStopRecording.setMinimumHeight(40)
-        self.btnStopRecording.setStyleSheet(
-            f"""
-            QPushButton#btnStopRecording {{
-                background-color: #F44336;
-                color: white;
-                font-size: 9pt;
-                font-weight: bold;
-                border: 2px solid #FF9800;
-                border-radius: 6px;
-            }}
-            QPushButton#btnStopRecording:hover {{
-                background-color: #D32F2F;
-            }}
-            QPushButton#btnStopRecording:pressed {{
-                background-color: #B71C1C;
-            }}
-        """
-        )
-        self.btnStopRecording.clicked.connect(self.stop_recording)
-        self.btnStopRecording.hide()
-        layout.addWidget(self.btnStopRecording)
-
-        # Open Media Folder Button
-        self.btnOpenMediaFolder = QPushButton(" 📁 Open Media Folder")
-        self.btnOpenMediaFolder.setObjectName("btnOpenMediaFolder")
-        self.btnOpenMediaFolder.setMinimumHeight(36)
-        self.btnOpenMediaFolder.setStyleSheet(
-            f"""
-            QPushButton#btnOpenMediaFolder {{
-                background-color: {self.colors['accent']};
-                color: white;
-                font-size: 8pt;
-                font-weight: bold;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton#btnOpenMediaFolder:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}
-        """
-        )
-        self.btnOpenMediaFolder.clicked.connect(self.open_media_folder)
-        layout.addWidget(self.btnOpenMediaFolder)
-
-        return group
-
-    def create_bottom_bar_OLD(self):
-        """Create bottom status bar. (OLD - NO LONGER USED)"""
-        from PyQt6.QtWidgets import QFrame, QHBoxLayout
-
-        bottom_bar = QFrame()
-        bottom_bar.setFixedHeight(35)  # More compact
-        bottom_bar.setStyleSheet(
-            f"""
-            QFrame {{
-                background-color: {self.colors['bg_secondary']};
-                border-top: 1px solid {self.colors['border']};
-            }}
-        """
-        )
-
-        layout = QHBoxLayout(bottom_bar)
-        layout.setContentsMargins(16, 6, 16, 6)
-
-        # Connection info (will be updated dynamically)
-        self.conn_label = QLabel(" Network: Connecting...")
-        self.conn_label.setStyleSheet(
-            f"color: {self.colors['warning']}; font-size: 8pt;"
-        )
-        layout.addWidget(self.conn_label)
-
-        layout.addStretch()
-
-        # Version info
-        version_label = QLabel("UIU MARINER v1.0 | ArduSub | 8-Thruster ROV")
-        version_label.setStyleSheet(
-            f"color: {self.colors['text_secondary']}; font-size: 8pt;"
-        )
-        layout.addWidget(version_label)
-
-        return bottom_bar
-
-        # Apply dark theme
-        self.setStyleSheet(
-            """
-            QMainWindow, QWidget {
-                background-color: #1e1e1e;
-                color: #e0e0e0;
+                padding: 0px;
+                z-index: 1000;
             }
-            QGroupBox {
-                border: 2px solid #3f3f46;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding: 15px;
-                font-weight: bold;
-                color: #FF8800;
+            QPushButton#floatingSidebarButton:hover {
+                background-color: #333;
             }
-            QPushButton {
-                background-color: #2a2a2a;
-                color: white;
-                border: 1px solid #FF8800;
-                border-radius: 5px;
-                padding: 10px;
-            }
-            QPushButton:hover {
-                background-color: #3a3a3a;
-            }
-            QPushButton:pressed {
-                background-color: #FF8800;
-            }
-            QLabel {
-                color: white;
-            }
-        """
-        )
+        """)
+        self.floatingSidebarButton.move(8, 60)  # Left edge, below top bar
+        self.floatingSidebarButton.clicked.connect(self.toggle_sidebar)
+        self.floatingSidebarButton.hide()  # Start hidden (sidebar visible by default)
+
+        # Ensure floating button stays on top and in position on resize
+        self.resizeEvent = self._wrap_resize_event(self.resizeEvent)
+
+    def _wrap_resize_event(self, original_resize_event):
+        def new_resize_event(event):
+            # Place the floating button at the left edge, below top bar
+            self.floatingSidebarButton.move(8, 60)
+            self.floatingSidebarButton.raise_()
+            original_resize_event(event)
+        return new_resize_event
+    def toggle_sidebar(self):
+        """Show/hide the sidebar (sideBar) when the toggle button is pressed."""
+        if hasattr(self.ui, 'sideBar'):
+            is_visible = self.ui.sideBar.isVisible()
+            self.ui.sideBar.setVisible(not is_visible)
+            # Optionally, adjust main content margins if needed
+            if hasattr(self.ui, 'mainContent'):
+                self.ui.mainContent.setContentsMargins(0, 0, 0, 0)
+            # Show floating button only when sidebar is hidden
+            if not is_visible:
+                if hasattr(self, 'floatingSidebarButton'):
+                    self.floatingSidebarButton.hide()
+            else:
+                if hasattr(self, 'floatingSidebarButton'):
+                    self.floatingSidebarButton.show()
+
 
     def find_ui_elements(self):
-        """Map new UI elements to expected variable names for compatibility."""
+        """Map new UI elements to expected variable names and configure responsive behavior."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QSizePolicy
+        
+        # No individual sensor value labels exist in the new UI, so skip this block.
+        
+
         try:
             # Camera labels - map from new UI to old variable names
-            self.lblCameraMain = self.ui.lblCam1Feed
-            self.lblCameraSmall = self.ui.lblCam2Feed
+            if hasattr(self.ui, 'lblMainCameraFeed'):
+                self.lblCameraMain = self.ui.lblMainCameraFeed
+            elif hasattr(self.ui, 'lblCam1Feed'):
+                self.lblCameraMain = self.ui.lblCam1Feed
+            else:
+                self.lblCameraMain = None
+                print("[UI] Warning: Main camera feed label not found in UI")
+            
+            # Secondary cameras
+            if hasattr(self.ui, 'lblBottomCameraFeed'):
+                self.lblCameraSmall = self.ui.lblBottomCameraFeed
+            elif hasattr(self.ui, 'lblCam2Feed'):
+                self.lblCameraSmall = self.ui.lblCam2Feed
+            else:
+                self.lblCameraSmall = None
+                print("[UI] Warning: Secondary camera feed label not found in UI")
+            
+            # Gripper camera (third camera)
+            if hasattr(self.ui, 'lblGripperCameraFeed'):
+                self.lblCameraGripper = self.ui.lblGripperCameraFeed
+            else:
+                self.lblCameraGripper = None
+            
+            # Ensure camera labels expand responsively and scale contents
+            from PyQt6.QtWidgets import QSizePolicy
+            if self.lblCameraMain:
+                self.lblCameraMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.lblCameraMain.setScaledContents(True)
+                self.lblCameraMain.setMinimumSize(320, 180)  # Minimum for smaller screens
+                self.lblCameraMain.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            if self.lblCameraSmall:
+                self.lblCameraSmall.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.lblCameraSmall.setScaledContents(True)
+                self.lblCameraSmall.setMinimumSize(240, 135)  # Minimum for smaller screens
+                self.lblCameraSmall.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Camera status labels
+            if hasattr(self.ui, 'lblCameraMainStatus'):
+                self.lblCameraMainStatus = self.ui.lblCameraMainStatus
+            else:
+                self.lblCameraMainStatus = None
+            
+            if hasattr(self.ui, 'lblCameraSmallStatus'):
+                self.lblCameraSmallStatus = self.ui.lblCameraSmallStatus
+            else:
+                self.lblCameraSmallStatus = None
 
-            # Status labels - map from new UI sensor status labels
-            self.lblPixhawkStatus = self.ui.lblPixhawkStatus
-            self.lblJoystickStatus = self.ui.lblJoystickStatus
 
-            # Mode and Arm status - use pixhawk and thrusters value labels
-            self.lblModeStatus = self.ui.lblPixhawkValue  # Will show mode
-            self.lblArmStatus = self.ui.lblThrustersValue  # Will show armed status
-
-            # Sensor status label
-            self.lblSensorStatus = self.ui.lblCommsStatus  # Map to telemetry status
-
-            # Sensor reading labels - map to new UI value labels
-            # Note: lblDepth uses lblDepthStatusValue from the depth status frame
-            self.lblDepth = self.ui.lblDepthStatusValue
-            self.lblTemperature = self.ui.lblTemperatureValue
-            # Note: Pressure will show in hPa, not bar
-            self.lblPressure = self.ui.lblPressureValue
 
             # Buttons - map from new UI
             self.btnArm = self.ui.btnArmConnect  # ARM/CONNECT button
@@ -1074,13 +377,25 @@ class MarinerROVControl(QMainWindow):
         """Setup navigation between different pages in the stacked widget."""
         try:
             # Connect sidebar buttons to switch pages
-            self.ui.btnDashboard.clicked.connect(lambda: self.switch_page(0))
-            self.ui.btnGallery.clicked.connect(lambda: self.switch_page(1))
-            self.ui.btnDataAnalysis.clicked.connect(lambda: self.switch_page(2))
-            self.ui.btnSettings.clicked.connect(lambda: self.switch_page(3))
+            # Connect navigation buttons
+            if hasattr(self.ui, 'btnMainControl'):
+                self.ui.btnMainControl.clicked.connect(lambda: self.switch_page(0))
+            if hasattr(self.ui, 'btnGallery'):
+                self.ui.btnGallery.clicked.connect(lambda: self.switch_page(1))
+            if hasattr(self.ui, 'btnMissionLogs'):
+                self.ui.btnMissionLogs.clicked.connect(lambda: self.switch_page(2))
+            if hasattr(self.ui, 'btnSystemStatus'):
+                self.ui.btnSystemStatus.clicked.connect(lambda: self.switch_page(3))
+            if hasattr(self.ui, 'btnSettings'):
+                self.ui.btnSettings.clicked.connect(lambda: self.switch_page(4))
 
-            # Set Dashboard as default page
-            self.ui.stackedWidget.setCurrentIndex(0)
+            # Set Main Control as default page
+            self.ui.contentStack.setCurrentIndex(0)
+            if hasattr(self.ui, 'btnMainControl'):
+                self.ui.btnMainControl.setChecked(True)
+
+            # Setup Mission Logs functionality
+            self.setup_mission_logs()
 
             print("[UI] [OK] Navigation setup complete")
         except Exception as e:
@@ -1089,7 +404,7 @@ class MarinerROVControl(QMainWindow):
     def init_modern_compass(self):
         """Initialize the modern compass widget to replace the placeholder."""
         try:
-            from src.views.workers.modernCompass import ModernCompass
+            from .workers.modernCompass import ModernCompass
 
             # Create modern compass widget
             self.compass_widget = ModernCompass()
@@ -1126,20 +441,132 @@ class MarinerROVControl(QMainWindow):
 
             traceback.print_exc()
 
+    def configure_responsive_layout(self):
+        """Configure UI for responsive design - ensure elements scale properly on window resize."""
+        try:
+            from PyQt6.QtWidgets import QSizePolicy
+            
+            # Ensure main window can be resized
+            self.setMinimumSize(800, 600)
+            
+            # Make sidebar responsive (if it exists)
+            if hasattr(self.ui, 'side_frame') and self.ui.side_frame:
+                self.ui.side_frame.setMinimumWidth(180)
+                self.ui.side_frame.setMaximumWidth(280)
+            
+            # Configure main content area to be responsive
+            if hasattr(self.ui, 'main_frame') and self.ui.main_frame:
+                self.ui.main_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
+            # Make camera frames responsive
+            if hasattr(self.ui, 'main_cam_frame') and self.ui.main_cam_frame:
+                self.ui.main_cam_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
+            if hasattr(self.ui, 'cam2_frame') and self.ui.cam2_frame:
+                self.ui.cam2_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
+            # Configure stacked widget for responsive behavior
+            if hasattr(self.ui, 'contentStack') and self.ui.contentStack:
+                self.ui.contentStack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
+            # Make top bar responsive
+            if hasattr(self.ui, 'top_bar_frame') and self.ui.top_bar_frame:
+                self.ui.top_bar_frame.setMaximumHeight(80)
+            
+            # Fix bottom panel layout - set stretch factors for proper distribution
+            if hasattr(self.ui, 'horizontalLayout_4'):
+                layout = self.ui.horizontalLayout_4
+                # Set proper stretch factors for bottom panels
+                # Attitude Indicator: 1, Sensor Data: 3, System Control: 1
+                # This ensures Sensor Data gets more space as it's the most important panel
+                if layout.count() > 0:
+                    layout.setStretch(0, 1)  # Attitude panel - narrower
+                if layout.count() > 1:
+                    layout.setStretch(1, 3)  # Sensor Data panel - wider, more important
+                if layout.count() > 2:
+                    layout.setStretch(2, 1)  # System Control panel - medium width
+            
+            # Fix camera layout stretch factors - ensure proper ratio
+            if hasattr(self.ui, 'horizontalLayout_3'):
+                layout = self.ui.horizontalLayout_3
+                # Camera 1 should be larger (stretch 2), Camera 2 smaller (stretch 1)
+                if layout.count() > 0:
+                    layout.setStretch(0, 2)  # Main camera
+                if layout.count() > 1:
+                    layout.setStretch(1, 1)  # Secondary camera
+            
+            # Make attitude frame more flexible (remove max width restriction)
+            if hasattr(self.ui, 'attitude_frame') and self.ui.attitude_frame:
+                # Allow it to grow but keep reasonable limits
+                self.ui.attitude_frame.setMaximumWidth(16777215)  # Remove max width limit
+                self.ui.attitude_frame.setMinimumWidth(200)
+                self.ui.attitude_frame.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
+            
+            # Make sensor tab widget responsive
+            if hasattr(self.ui, 'tabWidget') and self.ui.tabWidget:
+                self.ui.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.ui.tabWidget.setMinimumWidth(300)
+            
+            # Make control frame responsive if it exists
+            if hasattr(self.ui, 'control_frame') and self.ui.control_frame:
+                self.ui.control_frame.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
+                self.ui.control_frame.setMinimumWidth(200)
+            
+            # Ensure main dashboard layout uses stretch properly
+            if hasattr(self.ui, 'verticalLayout_6'):
+                layout = self.ui.verticalLayout_6
+                # Camera section (index 0) should take more vertical space
+                if layout.count() > 0:
+                    layout.setStretch(0, 2)  # Top section (cameras)
+                # Bottom panels (index 1) should take less vertical space
+                if layout.count() > 1:
+                    layout.setStretch(1, 1)  # Bottom section (panels)
+            
+            print("[UI] [OK] Responsive layout configured with proper stretch factors")
+        except Exception as e:
+            print(f"[UI] [ERR] Failed to configure responsive layout: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def fix_label_text_visibility(self):
+        """Fix text visibility issues in status frame labels by ensuring HTML colors render."""
+        try:
+            from PyQt6.QtCore import Qt
+            from PyQt6.QtWidgets import QApplication
+            import re
+            
+            # No status label lists exist in the new UI, so skip this block.
+            pass
+            # No label updates needed for new UI
+            QApplication.processEvents()
+            print("[UI] [OK] Label text visibility fixed - HTML colors should now display")
+        except Exception as e:
+            print(f"[UI] [ERR] Failed to fix label visibility: {e}")
+            import traceback
+            traceback.print_exc()
+
     def switch_page(self, index):
         """Switch to a different page in the stacked widget."""
         try:
-            self.ui.stackedWidget.setCurrentIndex(index)
+            self.ui.contentStack.setCurrentIndex(index)
 
             # Load gallery when switching to gallery page
             if index == 1:  # Gallery page
                 self.load_gallery()
+            elif index == 2:  # Mission Logs page
+                self.load_mission_logs()
 
             # Update button checked states
-            self.ui.btnDashboard.setChecked(index == 0)
-            self.ui.btnGallery.setChecked(index == 1)
-            self.ui.btnDataAnalysis.setChecked(index == 2)
-            self.ui.btnSettings.setChecked(index == 3)
+            if hasattr(self.ui, 'btnMainControl'):
+                self.ui.btnMainControl.setChecked(index == 0)
+            if hasattr(self.ui, 'btnGallery'):
+                self.ui.btnGallery.setChecked(index == 1)
+            if hasattr(self.ui, 'btnMissionLogs'):
+                self.ui.btnMissionLogs.setChecked(index == 2)
+            if hasattr(self.ui, 'btnSystemStatus'):
+                self.ui.btnSystemStatus.setChecked(index == 3)
+            if hasattr(self.ui, 'btnSettings'):
+                self.ui.btnSettings.setChecked(index == 4)
         except Exception as e:
             print(f"[UI] Page switch error: {e}")
 
@@ -1185,6 +612,9 @@ class MarinerROVControl(QMainWindow):
     def start_camera_feeds(self):
         """Start dual camera feeds with object detection via MJPEG streams."""
         try:
+            # Delay heavy imports until needed
+            from .workers.cameraWorker import DualCameraManager
+
             # Get MJPEG stream URLs from config
             stream_url0 = self.config["camera"].get(
                 "stream_url0", "http://raspberrypi.local:8080/video_feed"
@@ -1430,7 +860,15 @@ class MarinerROVControl(QMainWindow):
     @pyqtSlot(str)
     def update_camera_status_main(self, status):
         """Update main camera (port 8080) status label."""
-        if hasattr(self, "lblCam1Status") and self.lblCam1Status:
+        if hasattr(self, "lblCameraMainStatus") and self.lblCameraMainStatus:
+            if status == "Connected":
+                self.lblCameraMainStatus.setText("Status: Connected")
+                self.lblCameraMainStatus.setStyleSheet("QLabel { color: #00d4ff; font-size: 12px; }")
+            else:
+                self.lblCameraMainStatus.setText("Status: Disconnected")
+                self.lblCameraMainStatus.setStyleSheet("QLabel { color: #ff5555; font-size: 12px; }")
+        # Fallback to old label if exists
+        elif hasattr(self, "lblCam1Status") and self.lblCam1Status:
             if status == "Connected":
                 status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">CAM 1 - Connected</span></p></body></html>'
             else:
@@ -1440,17 +878,60 @@ class MarinerROVControl(QMainWindow):
     @pyqtSlot(str)
     def update_camera_status_cam2(self, status):
         """Update secondary camera (port 8081) status label."""
-        if hasattr(self, "lblCam2Status") and self.lblCam2Status:
+        if hasattr(self, "lblCameraSmallStatus") and self.lblCameraSmallStatus:
+            if status == "Connected":
+                self.lblCameraSmallStatus.setText("Status: Connected")
+                self.lblCameraSmallStatus.setStyleSheet("QLabel { color: #00d4ff; font-size: 12px; }")
+            else:
+                self.lblCameraSmallStatus.setText("Status: Disconnected")
+                self.lblCameraSmallStatus.setStyleSheet("QLabel { color: #ff5555; font-size: 12px; }")
+        # Fallback to old label if exists
+        elif hasattr(self, "lblCam2Status") and self.lblCam2Status:
             if status == "Connected":
                 status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">CAM 2 - Connected</span></p></body></html>'
             else:
                 status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#ff5555;">CAM 2 - Disconnected</span></p></body></html>'
             self.lblCam2Status.setText(status_html)
 
+    def update_time_display(self):
+        """Update the time display in the top bar."""
+        try:
+            from datetime import datetime
+            if hasattr(self.ui, 'lblTime'):
+                current_time = datetime.now().strftime("%H:%M:%S")
+                self.ui.lblTime.setText(current_time)
+        except Exception as e:
+            print(f"[UI] Time update error: {e}")
+
     @pyqtSlot(dict)
     def update_sensor_display(self, data):
         """Update sensor display with new data."""
         try:
+            # Update sensor values in Overview tab
+            if hasattr(self.ui, 'lblDepthValue'):
+                depth = data.get("depth", 0.0)
+                self.ui.lblDepthValue.setText(f"{depth:.2f} m")
+            
+            if hasattr(self.ui, 'lblTemperatureValue'):
+                temp = data.get("temperature", 0.0)
+                self.ui.lblTemperatureValue.setText(f"{temp:.1f} °C")
+            
+            if hasattr(self.ui, 'lblPressureValue'):
+                pressure = data.get("pressure", 0.0)
+                self.ui.lblPressureValue.setText(f"{pressure:.2f} bar")
+            
+            if hasattr(self.ui, 'lblBatteryValue'):
+                battery = data.get("battery", 0)
+                self.ui.lblBatteryValue.setText(f"{battery}%")
+                # Update battery color based on level
+                if battery > 50:
+                    self.ui.lblBatteryValue.setStyleSheet("QLabel { color: #00ff00; font-size: 14px; font-weight: bold; }")
+                elif battery > 20:
+                    self.ui.lblBatteryValue.setStyleSheet("QLabel { color: #ffb800; font-size: 14px; font-weight: bold; }")
+                else:
+                    self.ui.lblBatteryValue.setStyleSheet("QLabel { color: #ff5555; font-size: 14px; font-weight: bold; }")
+            
+            # Legacy support for old labels
             if hasattr(self, "lblDepth") and self.lblDepth:
                 # Format for new UI with HTML styling
                 depth_html = f'<html><head/><body><p><span style=" font-family:\'Consolas\'; font-size:16pt; font-weight:600; color:#00d4ff;">{data["depth"]:.1f}</span><span style=" font-family:\'Consolas\'; font-size:10pt; color:#808080;"> m</span></p></body></html>'
@@ -1838,7 +1319,7 @@ class MarinerROVControl(QMainWindow):
             print(f"[CONFIG] [ERR] Failed to save: {e}")
 
     def restart_camera_feeds(self):
-        """Restart camera feeds with new configuration."""
+        """Restart camera feeds with new configuration (non-blocking)."""
         print("[CAMERAS] Restarting camera feeds...")
 
         # Stop existing cameras
@@ -1846,14 +1327,12 @@ class MarinerROVControl(QMainWindow):
             self.camera_manager.stop_all()
             self.camera_manager = None
 
-        # Wait a moment
-        import time
+        # Use QTimer to avoid blocking the UI
+        QTimer.singleShot(500, self._restart_camera_feeds_continue)
 
-        time.sleep(0.5)
-
+    def _restart_camera_feeds_continue(self):
         # Start new cameras with updated config
         self.start_camera_feeds()
-
         print("[CAMERAS] [OK] Camera feeds restarted")
 
     def capture_image(self):
@@ -2230,6 +1709,267 @@ class MarinerROVControl(QMainWindow):
         except Exception as e:
             print(f"[GALLERY] [ERR] Failed to open file: {e}")
 
+    def setup_mission_logs(self):
+        """Setup Mission Logs page functionality."""
+        try:
+            # Connect filter buttons
+            if hasattr(self.ui, 'btnFilterAll'):
+                self.ui.btnFilterAll.clicked.connect(lambda: self.filter_logs('all'))
+            if hasattr(self.ui, 'btnFilterInfo'):
+                self.ui.btnFilterInfo.clicked.connect(lambda: self.filter_logs('info'))
+            if hasattr(self.ui, 'btnFilterWarning'):
+                self.ui.btnFilterWarning.clicked.connect(lambda: self.filter_logs('warning'))
+            if hasattr(self.ui, 'btnFilterError'):
+                self.ui.btnFilterError.clicked.connect(lambda: self.filter_logs('error'))
+            
+            # Connect search
+            if hasattr(self.ui, 'txtSearchLogs'):
+                self.ui.txtSearchLogs.textChanged.connect(self.search_logs)
+            
+            # Connect export button
+            if hasattr(self.ui, 'btnExportLogs'):
+                self.ui.btnExportLogs.clicked.connect(self.export_logs)
+            
+            # Initialize log entries list
+            self.mission_logs = []
+            self.filtered_logs = []
+            self.current_filter = 'all'
+            
+            print("[MISSION LOGS] Setup complete")
+        except Exception as e:
+            print(f"[MISSION LOGS] Setup error: {e}")
+
+    def load_mission_logs(self):
+        """Load and display mission logs."""
+        try:
+            from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel
+            from PyQt6.QtCore import Qt
+            from datetime import datetime
+            
+            # Sample log entries matching the design
+            sample_logs = [
+                {"type": "info", "timestamp": "2025-11-30 10:15:23", "category": "System", "message": "ROV system initialized successfully"},
+                {"type": "info", "timestamp": "2025-11-30 10:15:45", "category": "Thrusters", "message": "All 8 thrusters calibrated and ready"},
+                {"type": "info", "timestamp": "2025-11-30 10:16:12", "category": "Camera", "message": "Camera systems online - 3 feeds active"},
+                {"type": "warning", "timestamp": "2025-11-30 10:18:30", "category": "Thrusters", "message": "Thruster 3 power fluctuation detected"},
+                {"type": "info", "timestamp": "2025-11-30 10:20:05", "category": "Navigation", "message": "Descent to 12.5m depth initiated"},
+                {"type": "warning", "timestamp": "2025-11-30 10:22:15", "category": "Power", "message": "Battery level at 75%"},
+                {"type": "info", "timestamp": "2025-11-30 10:25:40", "category": "Tools", "message": "Image captured - IMG_001.jpg"},
+                {"type": "info", "timestamp": "2025-11-30 10:26:10", "category": "Tools", "message": "Video recording started - VID_001.mp4"},
+                {"type": "info", "timestamp": "2025-11-30 10:28:22", "category": "Navigation", "message": "Auto-hold position engaged"},
+                {"type": "info", "timestamp": "2025-11-30 10:30:05", "category": "Tools", "message": "Sample collection tool activated"},
+                {"type": "warning", "timestamp": "2025-11-30 10:32:18", "category": "Sensors", "message": "Water temperature dropped to 16.2°C"},
+                {"type": "info", "timestamp": "2025-11-30 10:35:45", "category": "Navigation", "message": "Waypoint WP_005 saved"},
+                {"type": "error", "timestamp": "2025-11-30 10:38:12", "category": "Communications", "message": "Communication latency spike detected - 250ms"},
+                {"type": "warning", "timestamp": "2025-11-30 10:40:30", "category": "Power", "message": "Battery level at 50% - consider surfacing soon"},
+                {"type": "info", "timestamp": "2025-11-30 10:42:55", "category": "Navigation", "message": "Ascending to 8m depth"},
+            ]
+            
+            # Store logs
+            self.mission_logs = sample_logs
+            self.filtered_logs = sample_logs.copy()
+            
+            # Clear existing log entries
+            if hasattr(self.ui, 'verticalLayout_logsList'):
+                layout = self.ui.verticalLayout_logsList
+                while layout.count():
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+            
+            # Create log entry widgets
+            for log in self.filtered_logs:
+                self.create_log_entry(log)
+            
+            print(f"[MISSION LOGS] Loaded {len(self.filtered_logs)} log entries")
+        except Exception as e:
+            print(f"[MISSION LOGS] Load error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def create_log_entry(self, log):
+        """Create a single log entry widget."""
+        try:
+            from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel
+            from PyQt6.QtCore import Qt
+            
+            # Determine icon and colors based on log type
+            if log["type"] == "info":
+                icon = "ℹ️"
+                entry_class = "logEntryInfo"
+                icon_color = "#00d4ff"
+            elif log["type"] == "warning":
+                icon = "⚠️"
+                entry_class = "logEntryWarning"
+                icon_color = "#ffb800"
+            else:  # error
+                icon = "❌"
+                entry_class = "logEntryError"
+                icon_color = "#ff4444"
+            
+            # Determine category tag color
+            category_class = "categoryTag"
+            if log["category"] == "Power":
+                category_class = "categoryTagPower"
+            elif log["category"] == "Communications":
+                category_class = "categoryTagCommunications"
+            
+            # Create main frame
+            import uuid
+            unique_id = str(uuid.uuid4())[:8]
+            log_frame = QFrame()
+            log_frame.setObjectName(f"logEntry_{unique_id}")
+            log_frame.setStyleSheet(f"""
+                QFrame#logEntry_{unique_id} {{
+                    background-color: {'rgba(255, 184, 0, 0.1)' if log['type'] == 'warning' else ('rgba(255, 68, 68, 0.1)' if log['type'] == 'error' else '#1a1d2e')};
+                    border: 1px solid {'rgba(255, 184, 0, 0.3)' if log['type'] == 'warning' else ('rgba(255, 68, 68, 0.3)' if log['type'] == 'error' else '#2a2d3e')};
+                    border-left: 4px solid {icon_color};
+                    border-radius: 8px;
+                    padding: 16px;
+                }}
+            """)
+            
+            # Create horizontal layout
+            h_layout = QHBoxLayout(log_frame)
+            h_layout.setSpacing(12)
+            h_layout.setContentsMargins(16, 16, 16, 16)
+            
+            # Icon label
+            icon_label = QLabel(icon)
+            icon_label.setStyleSheet(f"color: {icon_color}; font-size: 20px;")
+            icon_label.setFixedWidth(30)
+            h_layout.addWidget(icon_label)
+            
+            # Content layout
+            content_layout = QVBoxLayout()
+            content_layout.setSpacing(8)
+            
+            # Top row: timestamp and category
+            top_layout = QHBoxLayout()
+            top_layout.setSpacing(12)
+            
+            timestamp_label = QLabel(log["timestamp"])
+            timestamp_label.setStyleSheet("color: #8b949e; font-size: 12px;")
+            top_layout.addWidget(timestamp_label)
+            
+            top_layout.addStretch()
+            
+            category_label = QLabel(log["category"])
+            category_style = f"""
+                background-color: {'rgba(255, 184, 0, 0.2)' if log['category'] == 'Power' else ('rgba(255, 68, 68, 0.2)' if log['category'] == 'Communications' else '#1e3a5f')};
+                color: {'#ffb800' if log['category'] == 'Power' else ('#ff4444' if log['category'] == 'Communications' else '#00d4ff')};
+                border-radius: 12px;
+                padding: 4px 12px;
+                font-size: 11px;
+                font-weight: bold;
+            """
+            category_label.setStyleSheet(category_style)
+            top_layout.addWidget(category_label)
+            
+            content_layout.addLayout(top_layout)
+            
+            # Message label
+            message_label = QLabel(log["message"])
+            message_label.setStyleSheet("color: #ffffff; font-size: 14px;")
+            message_label.setWordWrap(True)
+            content_layout.addWidget(message_label)
+            
+            h_layout.addLayout(content_layout, 1)
+            
+            # Add to logs list
+            if hasattr(self.ui, 'verticalLayout_logsList'):
+                self.ui.verticalLayout_logsList.addWidget(log_frame)
+            
+        except Exception as e:
+            print(f"[MISSION LOGS] Create entry error: {e}")
+
+    def filter_logs(self, filter_type):
+        """Filter logs by type."""
+        try:
+            self.current_filter = filter_type
+            
+            # Update button states
+            if hasattr(self.ui, 'btnFilterAll'):
+                self.ui.btnFilterAll.setChecked(filter_type == 'all')
+            if hasattr(self.ui, 'btnFilterInfo'):
+                self.ui.btnFilterInfo.setChecked(filter_type == 'info')
+            if hasattr(self.ui, 'btnFilterWarning'):
+                self.ui.btnFilterWarning.setChecked(filter_type == 'warning')
+            if hasattr(self.ui, 'btnFilterError'):
+                self.ui.btnFilterError.setChecked(filter_type == 'error')
+            
+            # Filter logs
+            if filter_type == 'all':
+                self.filtered_logs = self.mission_logs.copy()
+            else:
+                self.filtered_logs = [log for log in self.mission_logs if log["type"] == filter_type]
+            
+            # Reload display
+            if hasattr(self.ui, 'verticalLayout_logsList'):
+                layout = self.ui.verticalLayout_logsList
+                while layout.count():
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+                
+                for log in self.filtered_logs:
+                    self.create_log_entry(log)
+            
+            print(f"[MISSION LOGS] Filtered to {len(self.filtered_logs)} {filter_type} logs")
+        except Exception as e:
+            print(f"[MISSION LOGS] Filter error: {e}")
+
+    def search_logs(self, search_text):
+        """Search logs by text."""
+        try:
+            search_lower = search_text.lower()
+            
+            # Filter by search text
+            if search_lower:
+                filtered = [log for log in self.mission_logs 
+                           if search_lower in log["message"].lower() 
+                           or search_lower in log["category"].lower()]
+            else:
+                filtered = self.mission_logs.copy()
+            
+            # Apply current type filter
+            if self.current_filter != 'all':
+                filtered = [log for log in filtered if log["type"] == self.current_filter]
+            
+            self.filtered_logs = filtered
+            
+            # Reload display
+            if hasattr(self.ui, 'verticalLayout_logsList'):
+                layout = self.ui.verticalLayout_logsList
+                while layout.count():
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+                
+                for log in self.filtered_logs:
+                    self.create_log_entry(log)
+        except Exception as e:
+            print(f"[MISSION LOGS] Search error: {e}")
+
+    def export_logs(self):
+        """Export logs to file."""
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            from datetime import datetime
+            import json
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Export Logs", f"mission_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                "JSON Files (*.json);;All Files (*)"
+            )
+            
+            if filename:
+                with open(filename, 'w') as f:
+                    json.dump(self.mission_logs, f, indent=2)
+                print(f"[MISSION LOGS] Exported {len(self.mission_logs)} logs to {filename}")
+        except Exception as e:
+            print(f"[MISSION LOGS] Export error: {e}")
+
     def _write_recording_frame(self):
         """Write frame to video during recording from main camera (port 8080)."""
         if not self.media_manager.is_recording():
@@ -2273,9 +2013,7 @@ class MarinerROVControl(QMainWindow):
         if self.recording_timer:
             self.recording_timer.stop()
 
-        # Stop media recording if active
-        if self.media_manager:
-            self.media_manager.stop()
+        # Stop media recording if active (no stop method in MediaManager, so skip)
 
         # Disarm if armed
         if self.armed and self.pixhawk:

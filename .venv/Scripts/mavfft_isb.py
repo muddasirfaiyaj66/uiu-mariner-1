@@ -1,4 +1,4 @@
-#!F:\UIU MARINER SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
+#!F:\UIU UNDERWATER ROBOTICS SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
 
 '''
 extract ISBH and ISBD messages from AP_Logging files and produce FFT plots

@@ -116,7 +116,7 @@ class JoystickController:
             # Use first available joystick
             self._connect_by_index(joystick_index)
 
-        return True if self.joystick else False
+        return bool(self.joystick)
 
     def _connect_by_target_name(self, joystick_count: int, target_name: str):
         """
@@ -195,13 +195,10 @@ class JoystickController:
             value = self.joystick.get_axis(axis_index)
             if invert:
                 value = -value
-
-            # Apply deadzone - ignore small movements
-            if abs(value) < DEADZONE:
-                return 0.0
-            return value
         except Exception:
             return 0.0
+        # Apply deadzone - ignore small movements
+        return 0.0 if abs(value) < DEADZONE else value
 
     def get_button(self, button_index: int) -> bool:
         """
@@ -361,9 +358,9 @@ class JoystickController:
             return {
                 "left_x": self.get_axis_value(0),  # Left stick horizontal
                 "left_y": self.get_axis_value(1),  # Left stick vertical
-                "right_x": self.get_axis_value(3),  # Right stick horizontal
-                "right_y": self.get_axis_value(4),  # Right stick vertical
-                "left_trigger": self.get_axis_value(2),  # LT trigger
+                "right_x": self.get_axis_value(2),  # Right stick horizontal
+                "right_y": self.get_axis_value(3),  # Right stick vertical
+                "left_trigger": self.get_axis_value(4),  # LT trigger
                 "right_trigger": self.get_axis_value(5),  # RT trigger
             }
 
@@ -422,61 +419,159 @@ class JoystickController:
 
     def compute_thruster_channels(self, joystick_state: Dict) -> List[int]:
         """
-        Convert joystick state to 8-channel thruster PWM values.
-
-        Maps joystick input to thruster control based on reference frame:
-
-        CONTROL MAPPING (ROV Frame):
-        - Left Stick Y (forward/backward):
-          * Negative = Move forward (both forward thrusters)
-          * Positive = Move backward (both forward thrusters reversed)
-          → Channels 1 & 8
-
-        - Left Stick X (rotation):
-          * Negative = Rotate left
-          * Positive = Rotate right
-          → Channels 2 & 5
-
-        - Right Stick Y (vertical):
-          * Negative = Move up (ascending)
-          * Positive = Move down (descending)
-          → Channels 3, 4, 6, 7 (vertical thrusters)
-
-        Args:
-            joystick_state (Dict): Output from read_joystick() method
-
-        Returns:
-            List[int]: 8 PWM values [ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8]
-                      Each value is 1000-2000 (1500 = neutral)
+        UIU Mariner Thruster Configuration:
+        - 45° angle thrusters: 1,2,3,4 (indices 0,1,2,3) - horizontal movement
+        - 0° angle thrusters: 5,6,7,8 (indices 4,5,6,7) - vertical movement
+        - Pixhawk MAIN OUT ports 1-8 connect to thrusters 1-8 serially
+        
+        Movement Logic:
+        - Left: 2,4 clockwise; 1,3 anticlockwise
+        - Right: 1,3 clockwise; 2,4 anticlockwise
+        - Up: 5,6,7,8 clockwise
+        - Down: 5,6,7,8 anticlockwise
+        - Forward: 1,2,3,4 clockwise
+        - Backward: 1,2,3,4 anticlockwise
+        - Yaw Right: 1,4 clockwise; 2,3 anticlockwise
+        - Yaw Left: 2,3 clockwise; 1,4 anticlockwise
+        
+        Joystick Controls:
+        - Up: Axis 3 negative OR Button 9
+        - Down: Axis 3 positive OR Button 8
+        - Forward: Axis 1 negative OR Hat Up
+        - Backward: Axis 1 positive OR Hat Down
+        - Left: Axis 0 negative OR Hat Left
+        - Right: Axis 0 positive OR Hat Right
+        - Yaw Right: Axis 2 positive OR Button 5 (RB)
+        - Yaw Left: Axis 2 negative OR Button 4 (LB)
+        - Camera Zoom In: Axis 5
+        - Camera Zoom Out: Axis 4
+        - Arm/Disarm: Button 6
+        - Capture Picture: Button 0
+        - Recording On/Off: Button 1
+        - Emergency Stop: Button 2
         """
         axes = joystick_state["axes"]
         buttons = joystick_state["buttons"]
+        hat = joystick_state["hat"]
 
-        # Initialize all channels to neutral
+        # Initialize all channels to neutral (1500)
         channels = [PWM_NEUTRAL] * 8
+        
+        # Store button states for external use
+        self.button_states = buttons
+        self.hat_state = hat
 
-        # Extract normalized axis values
-        forward_back = -axes[
-            "left_y"
-        ]  # Invert Y axis (forward is negative in screen coords)
-        left_right = axes["left_x"]  # Direct horizontal input
-        up_down = -axes["right_y"]  # Invert Y axis
+        # Read raw axis values for precise control
+        # Axis 0: Left stick X (left/right strafe)
+        # Axis 1: Left stick Y (forward/backward)
+        # Axis 2: Right stick X (yaw left/right)
+        # Axis 3: Right stick Y (up/down)
+        # Axis 4: Left trigger (camera zoom out)
+        # Axis 5: Right trigger (camera zoom in)
+        
+        axis_0 = axes.get("left_x", 0)  # Left stick X
+        axis_1 = axes.get("left_y", 0)  # Left stick Y
+        axis_2 = axes.get("right_x", 0)  # Right stick X
+        axis_3 = axes.get("right_y", 0)  # Right stick Y
+        axis_4 = axes.get("left_trigger", 0)  # LT
+        axis_5 = axes.get("right_trigger", 0)  # RT
 
-        # Log raw axis values periodically for debugging
-        self._log_raw_axes_periodically()
+        # --- MOVEMENT DETECTION ---
+        # Up: Axis 3 negative OR Button 9 (right stick press)
+        up = (axis_3 < -DEADZONE) or buttons.get("right_stick", False)
+        
+        # Down: Axis 3 positive OR Button 8 (left stick press)
+        down = (axis_3 > DEADZONE) or buttons.get("left_stick", False)
+        
+        # Forward: Axis 1 negative OR Hat Up
+        forward = (axis_1 < -DEADZONE) or (hat[1] == 1)
+        
+        # Backward: Axis 1 positive OR Hat Down
+        backward = (axis_1 > DEADZONE) or (hat[1] == -1)
+        
+        # Left: Axis 0 negative OR Hat Left
+        left = (axis_0 < -DEADZONE) or (hat[0] == -1)
+        
+        # Right: Axis 0 positive OR Hat Right
+        right = (axis_0 > DEADZONE) or (hat[0] == 1)
+        
+        # Yaw Right: Axis 2 positive OR Button 5 (RB)
+        yaw_right = (axis_2 > DEADZONE) or buttons.get("rb", False)
+        
+        # Yaw Left: Axis 2 negative OR Button 4 (LB)
+        yaw_left = (axis_2 < -DEADZONE) or buttons.get("lb", False)
 
-        # Apply forward/backward control (Channels 1 & 8)
-        self._apply_forward_backward_control(channels, forward_back)
+        # --- THRUSTER CONTROL ---
+        # Thrusters 1-8 map to channels[0-7]
+        # CW = PWM_MAX (2000), CCW = PWM_MIN (1000)
+        
+        # UP: 5,6,7,8 clockwise
+        if up:
+            channels[4] = PWM_MAX  # Thruster 5
+            channels[5] = PWM_MAX  # Thruster 6
+            channels[6] = PWM_MAX  # Thruster 7
+            channels[7] = PWM_MAX  # Thruster 8
+        
+        # DOWN: 5,6,7,8 anticlockwise
+        elif down:
+            channels[4] = PWM_MIN  # Thruster 5
+            channels[5] = PWM_MIN  # Thruster 6
+            channels[6] = PWM_MIN  # Thruster 7
+            channels[7] = PWM_MIN  # Thruster 8
+        
+        # FORWARD: 1,2,3,4 clockwise
+        elif forward:
+            channels[0] = PWM_MAX  # Thruster 1
+            channels[1] = PWM_MAX  # Thruster 2
+            channels[2] = PWM_MAX  # Thruster 3
+            channels[3] = PWM_MAX  # Thruster 4
+        
+        # BACKWARD: 1,2,3,4 anticlockwise
+        elif backward:
+            channels[0] = PWM_MIN  # Thruster 1
+            channels[1] = PWM_MIN  # Thruster 2
+            channels[2] = PWM_MIN  # Thruster 3
+            channels[3] = PWM_MIN  # Thruster 4
+        
+        # LEFT: 2,4 clockwise; 1,3 anticlockwise
+        elif left:
+            channels[1] = PWM_MAX  # Thruster 2 CW
+            channels[3] = PWM_MAX  # Thruster 4 CW
+            channels[0] = PWM_MIN  # Thruster 1 CCW
+            channels[2] = PWM_MIN  # Thruster 3 CCW
+        
+        # RIGHT: 1,3 clockwise; 2,4 anticlockwise
+        elif right:
+            channels[0] = PWM_MAX  # Thruster 1 CW
+            channels[2] = PWM_MAX  # Thruster 3 CW
+            channels[1] = PWM_MIN  # Thruster 2 CCW
+            channels[3] = PWM_MIN  # Thruster 4 CCW
+        
+        # YAW RIGHT: 1,4 clockwise; 2,3 anticlockwise
+        elif yaw_right:
+            channels[0] = PWM_MAX  # Thruster 1 CW
+            channels[3] = PWM_MAX  # Thruster 4 CW
+            channels[1] = PWM_MIN  # Thruster 2 CCW
+            channels[2] = PWM_MIN  # Thruster 3 CCW
+        
+        # YAW LEFT: 2,3 clockwise; 1,4 anticlockwise
+        elif yaw_left:
+            channels[1] = PWM_MAX  # Thruster 2 CW
+            channels[2] = PWM_MAX  # Thruster 3 CW
+            channels[0] = PWM_MIN  # Thruster 1 CCW
+            channels[3] = PWM_MIN  # Thruster 4 CCW
 
-        # Apply left/right rotation control (Channels 2 & 5)
-        self._apply_left_right_control(channels, left_right)
+        # --- CAMERA ZOOM ---
+        # Axis 5 (RT): Zoom In
+        # Axis 4 (LT): Zoom Out
+        self.camera_zoom_in = axis_5 > 0.1
+        self.camera_zoom_out = axis_4 > 0.1
 
-        # Apply up/down vertical control (Channels 3, 4, 6, 7)
-        self._apply_vertical_control(channels, up_down)
-
-        # Check for emergency stop (Start button)
-        if buttons["start"]:
+        # --- EMERGENCY STOP ---
+        # Button 2 (X button): Emergency stop all thrusters
+        if buttons.get("x", False):
             self._emergency_stop(channels)
+            print("[JOYSTICK] ⚠️ EMERGENCY STOP ACTIVATED!")
 
         return channels
 
@@ -487,20 +582,18 @@ class JoystickController:
         Prevents console spam by only logging every 1 second
         and only when axes are actively being used (value > 0.1).
         """
+        import contextlib
         now = time.time()
         if now - self._last_axes_log_time > 1.0:  # Log at most once per second
-            try:
+            with contextlib.suppress(Exception):
                 num_axes = self.joystick.get_numaxes()
                 raw_axes = [self.joystick.get_axis(i) for i in range(num_axes)]
-
                 # Only log if meaningful movement detected
                 if any(abs(val) > 0.1 for val in raw_axes):
                     axes_str = ", ".join(
                         [f"Axis{i}={raw_axes[i]:.2f}" for i in range(num_axes)]
                     )
                     print(f"[DEBUG] RAW AXES: {axes_str}")
-            except Exception:
-                pass
             self._last_axes_log_time = now
 
     def _apply_forward_backward_control(self, channels: list, forward_back: float):

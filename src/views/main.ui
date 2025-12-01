@@ -1,0 +1,1564 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1600</width>
+    <height>1000</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>ROV Control Station</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QMainWindow {
+    background-color: #10121D;
+}
+QPushButton {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: transparent;
+    color: #ffffff;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+}
+QLineEdit, QComboBox {
+    background-color: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 14px;
+}
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #00d4ff;
+}
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+QScrollBar:vertical {
+    background-color: #1a1d2e;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background-color: #2a2d3e;
+    border-radius: 4px;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: #3a3d4e;
+}
+QTabWidget::pane {
+    border: none;
+    background-color: #10121D;
+}
+QTabBar::tab {
+    background-color: transparent;
+    color: #8B949E;
+    padding: 12px 24px;
+    border: none;
+    font-size: 14px;
+}
+QTabBar::tab:selected {
+    color: #ffffff;
+    border-bottom: 2px solid #00d4ff;
+}
+QTabBar::tab:hover {
+    color: #ffffff;
+}
+</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout_main">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="sideBar">
+      <property name="minimumSize">
+       <size>
+        <width>260</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>260</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">QFrame#sideBar {
+    background-color: #10121D;
+    border-right: 1px solid #1a1d2e;
+}
+</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_sidebar">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="logoSection">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>80</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>80</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_logo">
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <property name="leftMargin">
+           <number>20</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>20</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lblLogoIcon">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLabel {
+    background-color: #1a1d2e;
+    border-radius: 20px;
+    padding: 4px;
+    min-width: 48px;
+    max-width: 48px;
+    min-height: 48px;
+    max-height: 48px;
+}
+</string>
+            </property>
+            <property name="scaledContents">
+             <bool>true</bool>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="logoTextWidget">
+            <layout class="QVBoxLayout" name="verticalLayout_logoText">
+             <property name="spacing">
+              <number>2</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lblLogoText">
+               <property name="text">
+                <string>UIU AURA</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblLogoSubtext">
+               <property name="text">
+                <string>Underwater Robotics</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 12px;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_logo">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnMenuToggle">
+            <property name="text">
+             <string>☰</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #ffffff;
+    font-size: 20px;
+    border: none;
+    padding: 4px;
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    border-radius: 4px;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="navButtonsWidget">
+         <layout class="QVBoxLayout" name="verticalLayout_nav">
+          <property name="spacing">
+           <number>4</number>
+          </property>
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="btnMainControl">
+            <property name="text">
+             <string>🎮 Main Control</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #8B949E;
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border-left: 3px solid #00d4ff;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnGallery">
+            <property name="text">
+             <string>🖼️ Gallery</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #8B949E;
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border-left: 3px solid #00d4ff;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnMissionLogs">
+            <property name="text">
+             <string>📋 Mission Logs</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #8B949E;
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border-left: 3px solid #00d4ff;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnSystemStatus">
+            <property name="text">
+             <string>⚡ System Status</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #8B949E;
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border-left: 3px solid #00d4ff;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnSettings">
+            <property name="text">
+             <string>⚙️ Settings</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #8B949E;
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #1a1d2e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border-left: 3px solid #00d4ff;
+}
+</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_sidebar">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblSidebarFooter">
+         <property name="text">
+          <string>UIU Underwater Robotics and Automation Crew</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 11px;
+    padding: 12px 20px;
+}
+</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="mainContent">
+      <property name="styleSheet">
+       <string notr="true">QWidget#mainContent {
+    background-color: #10121D;
+}
+</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_mainContent">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="topBar">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>100</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>100</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QFrame#topBar {
+    background-color: #1a1d2e;
+    border-bottom: 1px solid #2a2d3e;
+}
+</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_topBar">
+          <property name="spacing">
+           <number>16</number>
+          </property>
+          <property name="leftMargin">
+           <number>24</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>24</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="titleSection">
+            <layout class="QVBoxLayout" name="verticalLayout_title">
+             <property name="spacing">
+              <number>4</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lblMainTitle">
+               <property name="text">
+                <string>ROV Control Station</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblSubtitle">
+               <property name="text">
+                <string>UIU AURA - Underwater Robotics Control</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 14px;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_topBar">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QWidget" name="statusSection">
+            <layout class="QHBoxLayout" name="horizontalLayout_status">
+             <property name="spacing">
+              <number>12</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lblConnectionStatus">
+               <property name="text">
+                <string>🟢 Connected</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #00ff00;
+    font-size: 14px;
+    font-weight: bold;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblTime">
+               <property name="text">
+                <string>23:51:16</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 14px;
+}
+</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="contentStack">
+         <property name="styleSheet">
+          <string notr="true">QStackedWidget {
+    background-color: #10121D;
+}
+</string>
+         </property>
+         <widget class="QWidget" name="mainControlPage">
+          <property name="styleSheet">
+           <string notr="true">QWidget {
+    background-color: #10121D;
+}
+</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_mainControl">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QTabWidget" name="tabWidget">
+             <property name="styleSheet">
+              <string notr="true">QTabWidget::pane {
+    border: none;
+    background-color: #10121D;
+}
+QTabBar::tab {
+    background-color: transparent;
+    color: #8B949E;
+    padding: 12px 24px;
+    border: none;
+    font-size: 14px;
+    min-width: 120px;
+}
+QTabBar::tab:selected {
+    color: #ffffff;
+    border-bottom: 2px solid #00d4ff;
+}
+QTabBar::tab:hover {
+    color: #ffffff;
+}
+</string>
+             </property>
+             <property name="currentIndex">
+              <number>0</number>
+             </property>
+             <widget class="QWidget" name="overviewTab">
+              <attribute name="title">
+               <string>Overview</string>
+              </attribute>
+              <layout class="QHBoxLayout" name="horizontalLayout_overview">
+               <property name="spacing">
+                <number>24</number>
+               </property>
+               <property name="leftMargin">
+                <number>24</number>
+               </property>
+               <property name="topMargin">
+                <number>24</number>
+               </property>
+               <property name="rightMargin">
+                <number>24</number>
+               </property>
+               <property name="bottomMargin">
+                <number>24</number>
+               </property>
+               <item>
+                <widget class="QWidget" name="cameraSection">
+                 <layout class="QVBoxLayout" name="verticalLayout_cameras">
+                  <property name="spacing">
+                   <number>16</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QFrame" name="mainCameraFrame">
+                    <layout class="QVBoxLayout" name="verticalLayout_mainCamera">
+                     <property name="spacing">
+                      <number>8</number>
+                     </property>
+                     <item>
+                      <widget class="QLabel" name="lblMainCameraTitle">
+                       <property name="text">
+                        <string>Main Camera</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #00d4ff; font-size: 16px; font-weight: bold; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblMainCameraFeed">
+                       <property name="text">
+                        <string>Camera Feed</string>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>640</width>
+                         <height>320</height>
+                        </size>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { background-color: #181b2a; border: 1px solid #23263a; border-radius: 8px; color: #8B949E; }</string>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignmentFlag::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QWidget" name="secondaryCamerasContainer">
+                    <layout class="QHBoxLayout" name="horizontalLayout_secondaryCameras">
+                     <property name="spacing">
+                      <number>12</number>
+                     </property>
+                     <item>
+                      <widget class="QFrame" name="bottomCameraFrame">
+                       <layout class="QVBoxLayout" name="verticalLayout_bottomCamera">
+                        <item>
+                         <widget class="QLabel" name="lblBottomCameraTitle">
+                          <property name="text">
+                           <string>Bottom Camera</string>
+                          </property>
+                          <property name="styleSheet">
+                           <string notr="true">QLabel { color: #00d4ff; font-size: 14px; font-weight: bold; }</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QLabel" name="lblBottomCameraFeed">
+                          <property name="text">
+                           <string>Camera Feed</string>
+                          </property>
+                          <property name="minimumSize">
+                           <size>
+                            <width>300</width>
+                            <height>160</height>
+                           </size>
+                          </property>
+                          <property name="styleSheet">
+                           <string notr="true">QLabel { background-color: #181b2a; border: 1px solid #23263a; border-radius: 8px; color: #8B949E; }</string>
+                          </property>
+                          <property name="alignment">
+                           <set>Qt::AlignmentFlag::AlignCenter</set>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QFrame" name="gripperCameraFrame">
+                       <layout class="QVBoxLayout" name="verticalLayout_gripperCamera">
+                        <item>
+                         <widget class="QLabel" name="lblGripperCameraTitle">
+                          <property name="text">
+                           <string>Gripper Camera</string>
+                          </property>
+                          <property name="styleSheet">
+                           <string notr="true">QLabel { color: #00d4ff; font-size: 14px; font-weight: bold; }</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QLabel" name="lblGripperCameraFeed">
+                          <property name="text">
+                           <string>Camera Feed</string>
+                          </property>
+                          <property name="minimumSize">
+                           <size>
+                            <width>300</width>
+                            <height>160</height>
+                           </size>
+                          </property>
+                          <property name="styleSheet">
+                           <string notr="true">QLabel { background-color: #181b2a; border: 1px solid #23263a; border-radius: 8px; color: #8B949E; }</string>
+                          </property>
+                          <property name="alignment">
+                           <set>Qt::AlignmentFlag::AlignCenter</set>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QFrame" name="rightPanelFrame">
+                 <property name="styleSheet">
+                  <string notr="true">QFrame#rightPanelFrame {
+    background-color: #181b2a;
+    border: 1px solid #23263a;
+    border-radius: 12px;
+    padding: 18px 16px 18px 16px;
+}</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_rightPanel">
+                  <property name="spacing">
+                   <number>18</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>12</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>12</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>12</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>12</number>
+                  </property>
+                  <item>
+                   <widget class="QFrame" name="orientationHeadingCard">
+                    <layout class="QVBoxLayout" name="verticalLayout_orientation">
+                     <item>
+                      <widget class="QLabel" name="lblOrientationTitle">
+                       <property name="text">
+                        <string>Orientation &amp; Heading</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #00d4ff; font-size: 15px; font-weight: bold; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblCompass">
+                       <property name="text">
+                        <string>Compass Widget</string>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>180</width>
+                         <height>120</height>
+                        </size>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignmentFlag::AlignCenter</set>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { background: #10121D; border-radius: 90px; color: #8B949E; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblPitchRollYaw">
+                       <property name="text">
+                        <string>Pitch: 0°  Roll: 0°  Yaw: 0°</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #8B949E; font-size: 13px; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QFrame" name="sensorDataCard">
+                    <layout class="QVBoxLayout" name="verticalLayout_sensorData">
+                     <item>
+                      <widget class="QLabel" name="lblSensorDataTitle">
+                       <property name="text">
+                        <string>Sensor Data</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #00d4ff; font-size: 15px; font-weight: bold; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblDepth">
+                       <property name="text">
+                        <string>Depth: 0.00 m</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #8B949E; font-size: 13px; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblTemperature">
+                       <property name="text">
+                        <string>Temperature: 0.0 °C</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #8B949E; font-size: 13px; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblPressure">
+                       <property name="text">
+                        <string>Pressure: 0.00 bar</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #8B949E; font-size: 13px; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="lblBattery">
+                       <property name="text">
+                        <string>Battery: 100%</string>
+                       </property>
+                       <property name="styleSheet">
+                        <string notr="true">QLabel { color: #8B949E; font-size: 13px; }</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QFrame" name="quickActionsCard">
+                    <layout class="QGridLayout" name="gridLayout_quickActions">
+                     <item row="0" column="0">
+                      <widget class="QPushButton" name="btnCapture">
+                       <property name="text">
+                        <string>Capture</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="0" column="1">
+                      <widget class="QPushButton" name="btnRecord">
+                       <property name="text">
+                        <string>Record</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="1" column="0">
+                      <widget class="QPushButton" name="btnLights">
+                       <property name="text">
+                        <string>Lights</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="1" column="1">
+                      <widget class="QPushButton" name="btnAutoHold">
+                       <property name="text">
+                        <string>Auto-Hold</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="2" column="0">
+                      <widget class="QPushButton" name="btnWaypoint">
+                       <property name="text">
+                        <string>Waypoint</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="2" column="1">
+                      <widget class="QPushButton" name="btnSurface">
+                       <property name="text">
+                        <string>Surface</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            <widget class="QWidget" name="thrusterControlTab">
+             <attribute name="title">
+              <string>Thruster Control</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_thrusterControl">
+              <property name="spacing">
+               <number>20</number>
+              </property>
+              <property name="leftMargin">
+               <number>24</number>
+              </property>
+              <property name="topMargin">
+               <number>24</number>
+              </property>
+              <property name="rightMargin">
+               <number>24</number>
+              </property>
+              <property name="bottomMargin">
+               <number>24</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lblThrusterControlTitle">
+                <property name="text">
+                 <string>Thruster Control</string>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: bold;
+}
+</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="sensorsTab">
+             <attribute name="title">
+              <string>Sensors</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_sensors">
+              <property name="spacing">
+               <number>20</number>
+              </property>
+              <property name="leftMargin">
+               <number>24</number>
+              </property>
+              <property name="topMargin">
+               <number>24</number>
+              </property>
+              <property name="rightMargin">
+               <number>24</number>
+              </property>
+              <property name="bottomMargin">
+               <number>24</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lblSensorsTitle">
+                <property name="text">
+                 <string>Sensors</string>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: bold;
+}
+</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="toolsTab">
+             <attribute name="title">
+              <string>Tools</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_tools">
+              <property name="spacing">
+               <number>20</number>
+              </property>
+              <property name="leftMargin">
+               <number>24</number>
+              </property>
+              <property name="topMargin">
+               <number>24</number>
+              </property>
+              <property name="rightMargin">
+               <number>24</number>
+              </property>
+              <property name="bottomMargin">
+               <number>24</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lblToolsTitle">
+                <property name="text">
+                 <string>Tools</string>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: bold;
+}
+</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+       <widget class="QWidget" name="galleryPage">
+        <property name="styleSheet">
+         <string notr="true">QWidget {
+    background-color: #10121D;
+}
+</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_gallery">
+         <property name="spacing">
+          <number>20</number>
+         </property>
+         <property name="leftMargin">
+          <number>24</number>
+         </property>
+         <property name="topMargin">
+          <number>24</number>
+         </property>
+         <property name="rightMargin">
+          <number>24</number>
+         </property>
+         <property name="bottomMargin">
+          <number>24</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lblGalleryTitle">
+           <property name="text">
+            <string>Media Gallery</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lblGallerySubtitle">
+           <property name="text">
+            <string>Captured images and recorded videos</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 14px;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="galleryFilters">
+           <layout class="QHBoxLayout" name="horizontalLayout_galleryFilters">
+            <property name="spacing">
+             <number>12</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="btnFilterAllMedia">
+              <property name="text">
+               <string>🖼️ All Media</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton {
+    background-color: #00d4ff;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #00b8e6;
+}
+QPushButton:checked {
+    background-color: #00d4ff;
+}
+</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnFilterImages">
+              <property name="text">
+               <string>📷 Images</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>false</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton {
+    background-color: #1a1d2e;
+    color: #8B949E;
+    border: 1px solid #2a2d3e;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+QPushButton:hover {
+    background-color: #2a2d3e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border: 1px solid #00d4ff;
+}
+</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnFilterVideos">
+              <property name="text">
+               <string>🎥 Videos</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>false</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton {
+    background-color: #1a1d2e;
+    color: #8B949E;
+    border: 1px solid #2a2d3e;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+QPushButton:hover {
+    background-color: #2a2d3e;
+    color: #ffffff;
+}
+QPushButton:checked {
+    background-color: #1e3a5f;
+    color: #00d4ff;
+    border: 1px solid #00d4ff;
+}
+</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QScrollArea" name="scrollAreaGallery">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+</string>
+           </property>
+           <widget class="QWidget" name="galleryContent">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>1200</width>
+              <height>600</height>
+             </rect>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_gallery">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="missionLogsPage">
+        <property name="styleSheet">
+         <string notr="true">QWidget {
+    background-color: #10121D;
+}
+</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_missionLogs">
+         <property name="spacing">
+          <number>20</number>
+         </property>
+         <property name="leftMargin">
+          <number>24</number>
+         </property>
+         <property name="topMargin">
+          <number>24</number>
+         </property>
+         <property name="rightMargin">
+          <number>24</number>
+         </property>
+         <property name="bottomMargin">
+          <number>24</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lblMissionLogsTitle">
+           <property name="text">
+            <string>Mission Logs</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="systemStatusPage">
+        <property name="styleSheet">
+         <string notr="true">QWidget {
+    background-color: #10121D;
+}
+</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_systemStatus">
+         <property name="spacing">
+          <number>20</number>
+         </property>
+         <property name="leftMargin">
+          <number>24</number>
+         </property>
+         <property name="topMargin">
+          <number>24</number>
+         </property>
+         <property name="rightMargin">
+          <number>24</number>
+         </property>
+         <property name="bottomMargin">
+          <number>24</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lblSystemStatusTitle">
+           <property name="text">
+            <string>System Status</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lblSystemStatusSubtitle">
+           <property name="text">
+            <string>Hardware and software diagnostics</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 14px;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="settingsPage">
+        <property name="styleSheet">
+         <string notr="true">QWidget {
+    background-color: #10121D;
+}
+</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_settings">
+         <property name="spacing">
+          <number>20</number>
+         </property>
+         <property name="leftMargin">
+          <number>24</number>
+         </property>
+         <property name="topMargin">
+          <number>24</number>
+         </property>
+         <property name="rightMargin">
+          <number>24</number>
+         </property>
+         <property name="bottomMargin">
+          <number>24</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lblSettingsTitle">
+           <property name="text">
+            <string>Settings</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lblSettingsSubtitle">
+           <property name="text">
+            <string>Configure ROV system parameters</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    color: #8B949E;
+    font-size: 14px;
+}
+</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+
+    </widget> <!-- Close QStackedWidget -->
+     </item>
+    </layout>
+   </widget> <!-- Close mainContent -->
+  </item>
+ </layout>
+ </widget> <!-- Close centralwidget -->
+ </widget> <!-- Close QMainWindow -->
+<resources/>
+<connections/>
+</ui>
+

@@ -1,4 +1,4 @@
-#!F:\UIU MARINER SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
+#!F:\UIU UNDERWATER ROBOTICS SOFTWARES\uiu-mariner-1\.venv\Scripts\python.exe
 
 '''
 play back a mavlink log as a FlightGear FG NET stream, and as a
