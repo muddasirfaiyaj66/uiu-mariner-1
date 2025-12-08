@@ -110,18 +110,31 @@ class ROVController(QObject):
         except Exception as e:
             logger.error(f"[❌] Disconnect error: {e}")
 
-    def arm_vehicle(self) -> bool:
-        """Arm the vehicle for operation"""
+    def arm_vehicle(self, force=True) -> bool:
+        """
+        Arm the vehicle for operation
+        
+        Args:
+            force (bool): If True, force arm bypassing pre-arm checks (default: True for ROV testing)
+        """
         if not self.state.is_connected() or not self.pixhawk_connection:
             logger.warning("[⚠️] Cannot arm: not connected")
             return False
 
         try:
             logger.info("[ROV] Arming vehicle...")
-            self.pixhawk_connection.arm()
-            self.state.telemetry.system_armed = True
-            self.vehicle_armed_changed.emit(True)
-            return True
+            success = self.pixhawk_connection.arm(force=force)
+            if success:
+                self.state.telemetry.system_armed = True
+                self.vehicle_armed_changed.emit(True)
+                return True
+            else:
+                logger.warning("[⚠️] Arming rejected - trying force arm...")
+                success = self.pixhawk_connection.arm(force=True)
+                if success:
+                    self.state.telemetry.system_armed = True
+                    self.vehicle_armed_changed.emit(True)
+                return success
         except Exception as e:
             logger.error(f"[❌] Arm failed: {e}")
             self.error_occurred.emit(f"Arm failed: {e}")

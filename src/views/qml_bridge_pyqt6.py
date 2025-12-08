@@ -19,7 +19,7 @@ import sys
 import os
 from pathlib import Path
 from PyQt6.QtCore import (QObject, pyqtSignal as Signal, pyqtSlot as Slot, 
-                          pyqtProperty as Property, QTimer, QUrl, Qt)
+                          pyqtProperty as Property, QTimer, QUrl, Qt, QThread)
 from PyQt6.QtGui import QGuiApplication, QImage, QPixmap
 from PyQt6.QtQml import QQmlApplicationEngine
 from PyQt6.QtQuick import QQuickImageProvider
@@ -27,6 +27,7 @@ import numpy as np
 import cv2
 import json
 import time
+import threading
 
 # Import ROV components - avoid importing mainWindow to prevent conflicts
 try:
@@ -365,18 +366,20 @@ class ROVBackend(QObject):
         try:
             print("[ROV] Initializing components...")
             
-            # Start timers
+            # Start timers immediately
             self.ui_timer.start()
+            self.control_timer.start()
             
-            # Initialize components with delays for smooth startup
-            QTimer.singleShot(100, self._init_cameras)
-            QTimer.singleShot(200, self._init_sensors)
-            QTimer.singleShot(300, self._init_pixhawk)
-            QTimer.singleShot(400, self._init_joystick)
-            QTimer.singleShot(500, self._init_media_manager)
+            # Priority 1: Initialize Pi-dependent components immediately (cameras, sensors)
+            QTimer.singleShot(50, self._init_cameras)
+            QTimer.singleShot(100, self._init_sensors)
             
-            # Start control loop after all components are initialized
-            QTimer.singleShot(1000, self.control_timer.start)
+            # Priority 2: Initialize local components (joystick, media)
+            QTimer.singleShot(150, self._init_joystick)
+            QTimer.singleShot(200, self._init_media_manager)
+            
+            # Priority 3: Initialize Pixhawk last (has 10s timeout, runs in background)
+            QTimer.singleShot(250, self._init_pixhawk)
             
             print("[ROV] Component initialization scheduled")
         except Exception as e:
@@ -385,7 +388,7 @@ class ROVBackend(QObject):
             traceback.print_exc()
     
     def _init_cameras(self):
-        """Initialize camera feeds"""
+        """Initialize camera feeds - must run on main thread for Qt signals"""
         try:
             print("[Cameras] Initializing camera streams...")
             
@@ -412,7 +415,7 @@ class ROVBackend(QObject):
             print(f"[Cameras] Initialization error: {e}")
     
     def _init_sensors(self):
-        """Initialize sensor telemetry"""
+        """Initialize sensor telemetry - must run on main thread for Qt signals"""
         try:
             print("[Sensors] Initializing sensor connection...")
             
@@ -437,25 +440,36 @@ class ROVBackend(QObject):
             print(f"[Sensors] Initialization error: {e}")
     
     def _init_pixhawk(self):
-        """Initialize Pixhawk connection"""
-        try:
-            print("[Pixhawk] Connecting to vehicle...")
-            
-            connection_string = self.config["mavlink_connection"]
-            self.pixhawk = PixhawkConnection(connection_string)
-            
-            if self.pixhawk.connect():
-                self.setConnectionStatus("Connected")
-                self.setPixhawkConnected(True)
-                print("[Pixhawk] ✅ Connected")
-            else:
-                self.setConnectionStatus("Failed")
+        """Initialize Pixhawk connection in background thread to avoid blocking UI"""
+        def connect_pixhawk():
+            try:
+                print("[Pixhawk] Connecting to vehicle (background thread)...")
+                
+                connection_string = self.config["mavlink_connection"]
+                self.pixhawk = PixhawkConnection(connection_string)
+                
+                # Attempt connection (may take up to 10 seconds)
+                self.pixhawk.connect()
+                
+                # Check actual connection status
+                if self.pixhawk.check_connection():
+                    self.setConnectionStatus("Connected")
+                    self.setPixhawkConnected(True)
+                    print("[Pixhawk] ✅ Connected and verified")
+                else:
+                    self.setConnectionStatus("Disconnected")
+                    self.setPixhawkConnected(False)
+                    print("[Pixhawk] ⚠ Connection attempt completed, no heartbeat detected")
+                    print("[Pixhawk] Status will update automatically when connection is established")
+            except Exception as e:
+                print(f"[Pixhawk] Connection error: {e}")
+                self.setConnectionStatus("Error")
                 self.setPixhawkConnected(False)
-                print("[Pixhawk] ❌ Connection failed")
-        except Exception as e:
-            print(f"[Pixhawk] Connection error: {e}")
-            self.setConnectionStatus("Error")
-            self.setPixhawkConnected(False)
+        
+        # Run connection in background thread so UI stays responsive
+        connection_thread = threading.Thread(target=connect_pixhawk, daemon=True)
+        connection_thread.start()
+        print("[Pixhawk] Connection attempt started in background")
     
     def _init_joystick(self):
         """Initialize joystick controller"""
@@ -535,6 +549,15 @@ class ROVBackend(QObject):
     def _control_loop(self):
         """Main control loop - handles joystick input and vehicle control"""
         try:
+            # Check and update Pixhawk connection status
+            if self.pixhawk:
+                is_connected = self.pixhawk.check_connection()
+                # Only update if status changed to avoid excessive signal emissions
+                if is_connected != self._pixhawk_connected:
+                    self.setPixhawkConnected(is_connected)
+                    status_text = "Connected" if is_connected else "Disconnected"
+                    print(f"[UI] Pixhawk status changed: {status_text}")
+            
             if self.joystick and self.joystick.is_ready():
                 state = self.joystick.read_joystick()
                 channels = self.joystick.compute_thruster_channels(state)

@@ -1,16 +1,41 @@
-# UIU MARINER - ROV Ground Station Control System# UIU MARINER - ROV Control System
+# UIU MARINER - ROV Control System
 
-**Professional Ground Station Control Software for the UIU MARINER Underwater Robotics Project**## 🌊 Overview
+**Professional Ground Station Control Software for the UIU MARINER Underwater Robotics Project**
 
----Complete software solution for controlling an underwater ROV (Remotely Operated Vehicle) using:
+---
 
-## Overview- **Hardware**: Pixhawk flight controller running ArduSub firmware
+## 🌊 Overview
 
+Complete software solution for controlling an underwater ROV (Remotely Operated Vehicle) using:
+
+- **Hardware**: Pixhawk flight controller running ArduSub firmware
 - **Communication**: MAVLink protocol over UDP/TCP/Serial
-
-UIU MARINER is a ground-based control system for operating an 8-thruster autonomous underwater vehicle (AUV). The system communicates with the ROV via a Raspberry Pi intermediary, enabling real-time thruster control, telemetry monitoring, and camera feeds.- **Input**: Xbox 360 / compatible gamepad
-
+- **Input**: Xbox 360 / compatible gamepad
 - **Interface**: PyQt6 desktop application
+
+## 🚨 TROUBLESHOOTING THRUSTERS
+
+**If your thrusters are not spinning:**
+
+```bash
+# Run the comprehensive thruster diagnostic tool
+python test_thrusters.py
+```
+
+This tool will:
+- Test Pixhawk connection
+- Check flight mode
+- Attempt to arm the vehicle
+- Test each thruster individually
+- Identify the exact problem
+
+For detailed troubleshooting steps, see: **[THRUSTER_TROUBLESHOOTING.md](THRUSTER_TROUBLESHOOTING.md)**
+
+**Quick fixes:**
+1. ✅ **ARM the vehicle** - Thrusters won't work unless armed
+2. ✅ **Set mode to MANUAL** - Required for direct control
+3. ✅ **Disable pre-arm checks** - Set `ARMING_CHECK=0` in QGroundControl for testing
+4. ✅ **Check SERVO functions** - Ensure SERVO1-8 are assigned to Motor1-8
 
 ### System Architecture
 

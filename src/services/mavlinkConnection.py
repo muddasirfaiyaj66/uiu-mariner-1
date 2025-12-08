@@ -75,8 +75,9 @@ class PixhawkConnection:
         self.connected = False
 
         # Timing parameters for connection monitoring
-        self.last_heartbeat_time = time.time()
-        self.last_successful_send_time = time.time()
+        # Initialize to 0 so connection check won't consider us connected until real heartbeat received
+        self.last_heartbeat_time = 0
+        self.last_successful_send_time = 0
         self.heartbeat_timeout = DEFAULT_HEARTBEAT_TIMEOUT
         self.last_reconnect_attempt = 0
         self.reconnect_interval = DEFAULT_RECONNECT_INTERVAL
@@ -87,6 +88,10 @@ class PixhawkConnection:
         self._last_sent_channels = None
         self._last_send_time = 0.0
         self._last_rc_log_time = 0
+        
+        # Heartbeat sending
+        self._last_heartbeat_sent = 0
+        self._heartbeat_interval = 1.0  # Send heartbeat every 1 second
 
     def connect(self):
         """
@@ -174,7 +179,14 @@ class PixhawkConnection:
 
             # Wait for heartbeat message to confirm connection
             print(f"[CONNECT] Waiting for heartbeat...")
-            self.vehicle.wait_heartbeat(timeout=10)
+            heartbeat = self.vehicle.wait_heartbeat(timeout=10)
+
+            # Verify heartbeat was actually received
+            if heartbeat is None:
+                print(f"[❌] No heartbeat received - connection failed")
+                self.connected = False
+                self.vehicle = None
+                return False
 
             # Connection successful - log details
             print(f"[✅] Heartbeat received — Pixhawk Connected!")
@@ -189,6 +201,8 @@ class PixhawkConnection:
 
         except Exception as e:
             print(f"[❌] MAVLink connection error: {e}")
+            self.connected = False
+            self.vehicle = None
             return False
 
     def _parse_connection_string(self, link: str):
@@ -326,13 +340,16 @@ class PixhawkConnection:
             print(f"[❌] Failed to set mode: {e}")
             return False
 
-    def arm(self):
+    def arm(self, force=False):
         """
         Arm the vehicle (enable thrusters for control).
 
         Arming sends a MAV_CMD_COMPONENT_ARM_DISARM command with parameter=1.
         This enables the propeller thrusters for control. Must be armed before
         sending RC_CHANNELS_OVERRIDE commands.
+
+        Args:
+            force (bool): If True, force arm bypassing pre-arm checks (param2=21196)
 
         Returns:
             True if arm command sent successfully, False otherwise
@@ -341,6 +358,7 @@ class PixhawkConnection:
             - Requires connected vehicle
             - Many autopilots have pre-arm safety checks
             - Some modes cannot be armed until checks pass
+            - Use force=True to bypass pre-arm checks (for testing only!)
         """
         if not self.connected:
             print("[❌] Not connected to Pixhawk - cannot arm")
@@ -349,20 +367,45 @@ class PixhawkConnection:
         try:
             # Send arm command using MAVLink command_long message
             # Parameter 1=1 means ARM, 0 would mean DISARM
+            # Parameter 2=21196 means FORCE ARM (bypass pre-arm checks)
+            force_param = 21196 if force else 0
+            
             self.vehicle.mav.command_long_send(
                 self.vehicle.target_system,
                 self.vehicle.target_component,
                 mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
                 0,  # confirmation
                 1,  # param1: 1=arm, 0=disarm
-                0,  # param2: unused
+                force_param,  # param2: 21196=force arm, 0=normal
                 0,  # param3: unused
                 0,  # param4: unused
                 0,  # param5: unused
                 0,  # param6: unused
                 0,  # param7: unused
             )
-            print("[✅] Thrusters armed!")
+            
+            # Wait for acknowledgment
+            timeout = time.time() + 3
+            while time.time() < timeout:
+                msg = self.vehicle.recv_match(type='COMMAND_ACK', blocking=False, timeout=0.1)
+                if msg and msg.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+                    if msg.result == mavutil.mavlink.MAV_RESULT_ACCEPTED:
+                        print("[✅] Thrusters armed!")
+                        return True
+                    else:
+                        result_msg = {
+                            1: "TEMPORARILY_REJECTED",
+                            2: "DENIED", 
+                            3: "UNSUPPORTED",
+                            4: "FAILED"
+                        }.get(msg.result, f"UNKNOWN({msg.result})")
+                        print(f"[❌] Arming {result_msg}")
+                        if not force:
+                            print("[💡] Try: arm(force=True) to bypass pre-arm checks")
+                        return False
+            
+            # No ACK received, assume success
+            print("[✅] Thrusters armed! (no ACK)")
             return True
         except Exception as e:
             print(f"[❌] Arming failed: {e}")
@@ -408,6 +451,28 @@ class PixhawkConnection:
             print(f"[❌] Disarming failed: {e}")
             return False
 
+    def send_heartbeat(self):
+        """
+        Send heartbeat from ground station to Pixhawk.
+        
+        This keeps the MAVLink connection alive and prevents timeouts.
+        Should be called periodically (every 1 second recommended).
+        """
+        if not self.vehicle or not self.connected:
+            return False
+        
+        try:
+            # Send heartbeat as a ground station
+            self.vehicle.mav.heartbeat_send(
+                mavutil.mavlink.MAV_TYPE_GCS,  # Type: Ground Control Station
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+                0, 0, 0  # base_mode, custom_mode, system_status
+            )
+            self._last_heartbeat_sent = time.time()
+            return True
+        except Exception as e:
+            return False
+
     def send_rc_channels_override(self, channels):
         """
         Send RC_CHANNELS_OVERRIDE message to directly control thrusters.
@@ -439,6 +504,9 @@ class PixhawkConnection:
             - Updates rate-limited to ~20 Hz to avoid overwhelming autopilot
             - Connection status checked periodically (0.5s intervals)
         """
+        # Send periodic heartbeat to keep connection alive
+        self._send_periodic_heartbeat()
+        
         # Check connection status periodically (not every call for efficiency)
         self._check_connection_with_rate_limit()
 
@@ -465,6 +533,16 @@ class PixhawkConnection:
         # Send the RC override message
         return self._send_rc_override_message(channels)
 
+    def _send_periodic_heartbeat(self):
+        """
+        Send heartbeat periodically to keep connection alive.
+        
+        Rate-limited to 1 Hz to avoid overwhelming the link.
+        """
+        now = time.time()
+        if now - self._last_heartbeat_sent > self._heartbeat_interval:
+            self.send_heartbeat()
+    
     def _check_connection_with_rate_limit(self):
         """
         Check connection status, but only periodically to avoid overhead.

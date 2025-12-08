@@ -167,20 +167,14 @@ class MAVLinkTCPRelay:
                 msg = self.pixhawk.recv_match(blocking=False, timeout=0)
 
                 if msg:
-                    # Get the raw message buffer - pymavlink stores it in the message object
+                    # Get the raw message buffer from pymavlink
                     try:
-                        # The raw buffer is available directly from read_dict or msg_buf
-                        # We'll re-encode the message properly
-                        if hasattr(msg, "get_msgbuf"):
-                            msg_bytes = msg.get_msgbuf()
-                        elif hasattr(self.pixhawk, "msg_buf"):
+                        # pymavlink stores the raw message buffer in msg_buf attribute
+                        if hasattr(self.pixhawk, 'msg_buf') and self.pixhawk.msg_buf:
                             msg_bytes = self.pixhawk.msg_buf
                         else:
-                            # Fallback: re-pack the message
+                            # Fallback: encode the message manually
                             msg_bytes = self.pixhawk.mav.encode(msg)
-
-                        if not msg_bytes:
-                            msg_bytes = None
 
                         # Send to all connected clients
                         with self.clients_lock:

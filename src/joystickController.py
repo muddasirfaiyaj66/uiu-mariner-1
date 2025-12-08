@@ -419,36 +419,28 @@ class JoystickController:
 
     def compute_thruster_channels(self, joystick_state: Dict) -> List[int]:
         """
-        UIU Mariner Thruster Configuration:
-        - 45° angle thrusters: 1,2,3,4 (indices 0,1,2,3) - horizontal movement
-        - 0° angle thrusters: 5,6,7,8 (indices 4,5,6,7) - vertical movement
-        - Pixhawk MAIN OUT ports 1-8 connect to thrusters 1-8 serially
+        UIU Mariner 6-DOF Thruster Configuration:
+        - 45° angle thrusters: 1,2,3,4 (indices 0,1,2,3) - horizontal movement + yaw
+        - 0° angle thrusters: 5,6,7,8 (indices 4,5,6,7) - vertical movement (up/down)
         
-        Movement Logic:
-        - Left: 2,4 clockwise; 1,3 anticlockwise
-        - Right: 1,3 clockwise; 2,4 anticlockwise
-        - Up: 5,6,7,8 clockwise
-        - Down: 5,6,7,8 anticlockwise
-        - Forward: 1,2,3,4 clockwise
-        - Backward: 1,2,3,4 anticlockwise
-        - Yaw Right: 1,4 clockwise; 2,3 anticlockwise
-        - Yaw Left: 2,3 clockwise; 1,4 anticlockwise
+        Thrusters:
+        - T1-4: 45-degree vectored thrusters for forward/backward, left/right, yaw
+        - T5-8: 0-degree vertical thrusters for up/down
         
-        Joystick Controls:
-        - Up: Axis 3 negative OR Button 9
-        - Down: Axis 3 positive OR Button 8
-        - Forward: Axis 1 negative OR Hat Up
-        - Backward: Axis 1 positive OR Hat Down
-        - Left: Axis 0 negative OR Hat Left
-        - Right: Axis 0 positive OR Hat Right
-        - Yaw Right: Axis 2 positive OR Button 5 (RB)
-        - Yaw Left: Axis 2 negative OR Button 4 (LB)
-        - Camera Zoom In: Axis 5
-        - Camera Zoom Out: Axis 4
-        - Arm/Disarm: Button 6
-        - Capture Picture: Button 0
-        - Recording On/Off: Button 1
-        - Emergency Stop: Button 2
+        Rotation Convention:
+        - CW = full forward (PWM 2000)
+        - CCW = full reverse (PWM 1000)
+        - Neutral = stopped (PWM 1500)
+        
+        Movement Mappings:
+        - Forward (Axis 1 neg): T1-4 CW
+        - Backward (Axis 1 pos): T1-4 CCW
+        - Left (Axis 0 neg): T1,3 CCW + T2,4 CW
+        - Right (Axis 0 pos): T1,3 CW + T2,4 CCW
+        - Up (Axis 3 neg): T5-8 CW
+        - Down (Axis 3 pos): T5-8 CCW
+        - Yaw Right (Axis 2 pos): T1,4 CW + T2,3 CCW
+        - Yaw Left (Axis 2 neg): T2,3 CW + T1,4 CCW
         """
         axes = joystick_state["axes"]
         buttons = joystick_state["buttons"]
@@ -461,111 +453,88 @@ class JoystickController:
         self.button_states = buttons
         self.hat_state = hat
 
-        # Read raw axis values for precise control
-        # Axis 0: Left stick X (left/right strafe)
-        # Axis 1: Left stick Y (forward/backward)
-        # Axis 2: Right stick X (yaw left/right)
-        # Axis 3: Right stick Y (up/down)
-        # Axis 4: Left trigger (camera zoom out)
-        # Axis 5: Right trigger (camera zoom in)
-        
-        axis_0 = axes.get("left_x", 0)  # Left stick X
-        axis_1 = axes.get("left_y", 0)  # Left stick Y
-        axis_2 = axes.get("right_x", 0)  # Right stick X
-        axis_3 = axes.get("right_y", 0)  # Right stick Y
-        axis_4 = axes.get("left_trigger", 0)  # LT
-        axis_5 = axes.get("right_trigger", 0)  # RT
+        # Read normalized axis values (-1.0 to +1.0)
+        axis_0 = axes.get("left_x", 0)    # Left/Right strafe
+        axis_1 = axes.get("left_y", 0)    # Forward/Backward
+        axis_2 = axes.get("right_x", 0)   # Yaw
+        axis_3 = axes.get("right_y", 0)   # Up/Down
+        axis_4 = axes.get("left_trigger", 0)   # LT - Camera zoom out
+        axis_5 = axes.get("right_trigger", 0)  # RT - Camera zoom in
 
-        # --- MOVEMENT DETECTION ---
-        # Up: Axis 3 negative OR Button 9 (right stick press)
-        up = (axis_3 < -DEADZONE) or buttons.get("right_stick", False)
-        
-        # Down: Axis 3 positive OR Button 8 (left stick press)
-        down = (axis_3 > DEADZONE) or buttons.get("left_stick", False)
-        
-        # Forward: Axis 1 negative OR Hat Up
-        forward = (axis_1 < -DEADZONE) or (hat[1] == 1)
-        
-        # Backward: Axis 1 positive OR Hat Down
-        backward = (axis_1 > DEADZONE) or (hat[1] == -1)
-        
-        # Left: Axis 0 negative OR Hat Left
-        left = (axis_0 < -DEADZONE) or (hat[0] == -1)
-        
-        # Right: Axis 0 positive OR Hat Right
-        right = (axis_0 > DEADZONE) or (hat[0] == 1)
-        
-        # Yaw Right: Axis 2 positive OR Button 5 (RB)
-        yaw_right = (axis_2 > DEADZONE) or buttons.get("rb", False)
-        
-        # Yaw Left: Axis 2 negative OR Button 4 (LB)
-        yaw_left = (axis_2 < -DEADZONE) or buttons.get("lb", False)
+        # Process hat (D-pad) for digital input
+        hat_x = hat[0]  # -1=left, 0=center, +1=right
+        hat_y = hat[1]  # -1=down, 0=center, +1=up
 
-        # --- THRUSTER CONTROL ---
-        # Thrusters 1-8 map to channels[0-7]
-        # CW = PWM_MAX (2000), CCW = PWM_MIN (1000)
+        # Combine analog and digital inputs (analog takes priority)
+        if abs(axis_0) > DEADZONE:
+            strafe = axis_0
+        elif hat_x != 0:
+            strafe = float(hat_x)
+        else:
+            strafe = 0.0
+
+        if abs(axis_1) > DEADZONE:
+            forward_back = axis_1
+        elif hat_y != 0:
+            forward_back = float(hat_y)
+        else:
+            forward_back = 0.0
+
+        if abs(axis_2) > DEADZONE:
+            yaw = axis_2
+        else:
+            yaw = 0.0
+
+        if abs(axis_3) > DEADZONE:
+            vertical = axis_3
+        else:
+            vertical = 0.0
+
+        # --- 6-DOF THRUSTER MIXING ---
+        # Apply all 4 DOF movements with proper mixing
+        # This allows simultaneous control of multiple directions
         
-        # UP: 5,6,7,8 clockwise
-        if up:
-            channels[4] = PWM_MAX  # Thruster 5
-            channels[5] = PWM_MAX  # Thruster 6
-            channels[6] = PWM_MAX  # Thruster 7
-            channels[7] = PWM_MAX  # Thruster 8
+        # 1. FORWARD/BACKWARD (Axis 1): All 4 horizontal thrusters
+        if abs(forward_back) > DEADZONE:
+            pwm = self.axis_to_pwm(forward_back)
+            channels[0] = pwm  # T1
+            channels[1] = pwm  # T2
+            channels[2] = pwm  # T3
+            channels[3] = pwm  # T4
         
-        # DOWN: 5,6,7,8 anticlockwise
-        elif down:
-            channels[4] = PWM_MIN  # Thruster 5
-            channels[5] = PWM_MIN  # Thruster 6
-            channels[6] = PWM_MIN  # Thruster 7
-            channels[7] = PWM_MIN  # Thruster 8
+        # 2. LEFT/RIGHT STRAFE (Axis 0): Differential horizontal thrusters
+        if abs(strafe) > DEADZONE:
+            pwm_cw = self.axis_to_pwm(strafe)      # CW direction
+            pwm_ccw = self.axis_to_pwm(-strafe)    # CCW direction
+            
+            # Add to existing values (for mixing with forward/backward)
+            channels[0] = self._mix_pwm(channels[0], pwm_ccw)   # T1 CCW for right
+            channels[1] = self._mix_pwm(channels[1], pwm_cw)    # T2 CW for right
+            channels[2] = self._mix_pwm(channels[2], pwm_ccw)   # T3 CCW for right
+            channels[3] = self._mix_pwm(channels[3], pwm_cw)    # T4 CW for right
         
-        # FORWARD: 1,2,3,4 clockwise
-        elif forward:
-            channels[0] = PWM_MAX  # Thruster 1
-            channels[1] = PWM_MAX  # Thruster 2
-            channels[2] = PWM_MAX  # Thruster 3
-            channels[3] = PWM_MAX  # Thruster 4
+        # 3. YAW (Axis 2): Opposite rotation pairs
+        if abs(yaw) > DEADZONE:
+            pwm_cw = self.axis_to_pwm(yaw)         # CW direction
+            pwm_ccw = self.axis_to_pwm(-yaw)       # CCW direction
+            
+            # Add to existing values (for mixing with other movements)
+            channels[0] = self._mix_pwm(channels[0], pwm_cw)    # T1 CW for right yaw
+            channels[1] = self._mix_pwm(channels[1], pwm_ccw)   # T2 CCW for right yaw
+            channels[2] = self._mix_pwm(channels[2], pwm_ccw)   # T3 CCW for right yaw
+            channels[3] = self._mix_pwm(channels[3], pwm_cw)    # T4 CW for right yaw
         
-        # BACKWARD: 1,2,3,4 anticlockwise
-        elif backward:
-            channels[0] = PWM_MIN  # Thruster 1
-            channels[1] = PWM_MIN  # Thruster 2
-            channels[2] = PWM_MIN  # Thruster 3
-            channels[3] = PWM_MIN  # Thruster 4
-        
-        # LEFT: 2,4 clockwise; 1,3 anticlockwise
-        elif left:
-            channels[1] = PWM_MAX  # Thruster 2 CW
-            channels[3] = PWM_MAX  # Thruster 4 CW
-            channels[0] = PWM_MIN  # Thruster 1 CCW
-            channels[2] = PWM_MIN  # Thruster 3 CCW
-        
-        # RIGHT: 1,3 clockwise; 2,4 anticlockwise
-        elif right:
-            channels[0] = PWM_MAX  # Thruster 1 CW
-            channels[2] = PWM_MAX  # Thruster 3 CW
-            channels[1] = PWM_MIN  # Thruster 2 CCW
-            channels[3] = PWM_MIN  # Thruster 4 CCW
-        
-        # YAW RIGHT: 1,4 clockwise; 2,3 anticlockwise
-        elif yaw_right:
-            channels[0] = PWM_MAX  # Thruster 1 CW
-            channels[3] = PWM_MAX  # Thruster 4 CW
-            channels[1] = PWM_MIN  # Thruster 2 CCW
-            channels[2] = PWM_MIN  # Thruster 3 CCW
-        
-        # YAW LEFT: 2,3 clockwise; 1,4 anticlockwise
-        elif yaw_left:
-            channels[1] = PWM_MAX  # Thruster 2 CW
-            channels[2] = PWM_MAX  # Thruster 3 CW
-            channels[0] = PWM_MIN  # Thruster 1 CCW
-            channels[3] = PWM_MIN  # Thruster 4 CCW
+        # 4. VERTICAL UP/DOWN (Axis 3): All 4 vertical thrusters
+        if abs(vertical) > DEADZONE:
+            pwm = self.axis_to_pwm(vertical)
+            channels[4] = pwm  # T5
+            channels[5] = pwm  # T6
+            channels[6] = pwm  # T7
+            channels[7] = pwm  # T8
 
         # --- CAMERA ZOOM ---
-        # Axis 5 (RT): Zoom In
-        # Axis 4 (LT): Zoom Out
-        self.camera_zoom_in = axis_5 > 0.1
-        self.camera_zoom_out = axis_4 > 0.1
+        self.camera_zoom_in = axis_5 > 0.1   # RT
+        self.camera_zoom_out = axis_4 > 0.1  # LT
 
         # --- EMERGENCY STOP ---
         # Button 2 (X button): Emergency stop all thrusters
@@ -574,6 +543,29 @@ class JoystickController:
             print("[JOYSTICK] ⚠️ EMERGENCY STOP ACTIVATED!")
 
         return channels
+
+    def _mix_pwm(self, current_pwm: int, additional_pwm: int) -> int:
+        """
+        Mix two PWM values together for blended thruster control.
+        
+        Allows multiple simultaneous movements (e.g., forward + left).
+        Uses simple averaging to blend commands.
+        
+        Args:
+            current_pwm: Current PWM value (1000-2000)
+            additional_pwm: Additional PWM value to mix in (1000-2000)
+            
+        Returns:
+            Mixed PWM value (1000-2000)
+        """
+        if current_pwm == PWM_NEUTRAL and additional_pwm == PWM_NEUTRAL:
+            return PWM_NEUTRAL
+        
+        # Average the two values for smooth blending
+        mixed = int((current_pwm + additional_pwm) / 2)
+        
+        # Clamp to valid range
+        return max(PWM_MIN, min(PWM_MAX, mixed))
 
     def _log_raw_axes_periodically(self):
         """
