@@ -199,14 +199,83 @@ class ROVController(QObject):
             logger.error(f"[❌] RC send failed: {e}")
 
     def initialize_joystick(self) -> bool:
-        """Initialize Xbox joystick controller"""
+        """Initialize Xbox joystick controller with ArduSub mappings"""
         try:
             self.joystick = JoystickController()
-            logger.info("[✅] Joystick initialized")
+            
+            # Register callback functions for button actions
+            self.joystick.set_callback("on_arm", self._on_joystick_arm)
+            self.joystick.set_callback("on_disarm", self._on_joystick_disarm)
+            self.joystick.set_callback("on_capture_photo", self._on_capture_photo)
+            self.joystick.set_callback("on_video_start", self._on_video_start)
+            self.joystick.set_callback("on_video_stop", self._on_video_stop)
+            self.joystick.set_callback("on_emergency_stop", self._on_emergency_stop)
+            self.joystick.set_callback("on_timer_toggle", self._on_timer_toggle)
+            self.joystick.set_callback("on_camera_switch", self._on_camera_switch)
+            self.joystick.set_callback("on_camera_zoom_in", self._on_camera_zoom_in)
+            self.joystick.set_callback("on_camera_zoom_out", self._on_camera_zoom_out)
+            
+            logger.info("[✅] Joystick initialized with ArduSub mappings")
             return True
         except Exception as e:
             logger.warning(f"[⚠️] Joystick initialization failed: {e}")
             return False
+
+    # =========================================================================
+    # JOYSTICK CALLBACK HANDLERS
+    # =========================================================================
+
+    def _on_joystick_arm(self):
+        """Callback when arm button (Back) pressed"""
+        self.arm_vehicle(force=True)
+
+    def _on_joystick_disarm(self):
+        """Callback when disarm button (Back) pressed again"""
+        self.disarm_vehicle()
+
+    def _on_capture_photo(self):
+        """Callback when photo capture button (A) pressed - handled by UI"""
+        logger.info("[📷] Photo capture requested (UI handles)")
+        # Camera is on Pi, capture handled by UI - no MAVLink needed
+
+    def _on_video_start(self):
+        """Callback when video recording started (B toggle) - handled by UI"""
+        logger.info("[🎥] Video recording START requested (UI handles)")
+        # Camera is on Pi, recording handled by UI - no MAVLink needed
+
+    def _on_video_stop(self):
+        """Callback when video recording stopped (B toggle) - handled by UI"""
+        logger.info("[⏹️] Video recording STOP requested (UI handles)")
+        # Camera is on Pi, recording handled by UI - no MAVLink needed
+
+    def _on_emergency_stop(self):
+        """Callback when emergency stop button (X) pressed"""
+        logger.warning("[🚨 EMERGENCY STOP] Triggered by joystick!")
+        if self.pixhawk_connection:
+            # Send zero-throttle command
+            self.pixhawk_connection.send_emergency_stop()
+            # Disarm the vehicle
+            self.disarm_vehicle()
+
+    def _on_timer_toggle(self):
+        """Callback when timer toggle button (Y) pressed"""
+        # Emit signal for UI to handle timer
+        logger.info("[⏱️] Timer toggle requested")
+
+    def _on_camera_switch(self):
+        """Callback when camera switch button (Start) pressed"""
+        logger.info("[📹] Camera switch requested")
+        # This would typically emit a signal for the UI to handle
+
+    def _on_camera_zoom_in(self):
+        """Callback when zoom in trigger (RT) pressed - handled by UI/OpenCV"""
+        logger.debug("[🔍+] Zoom in requested (UI handles via OpenCV)")
+        # UI handles zoom via OpenCV - no MAVLink needed
+
+    def _on_camera_zoom_out(self):
+        """Callback when zoom out trigger (LT) pressed - handled by UI/OpenCV"""
+        logger.debug("[🔍-] Zoom out requested (UI handles via OpenCV)")
+        # UI handles zoom via OpenCV - no MAVLink needed
 
     def _control_loop(self):
         """Main control loop executed at regular intervals"""
@@ -222,11 +291,21 @@ class ROVController(QObject):
                 self.control_loop_timer.stop()
                 return
 
-            # If joystick available, read input and update RC channels
+            # If joystick available, read input and send MANUAL_CONTROL
             if self.joystick and self.joystick.is_connected():
-                self.joystick.update()
-                rc_values = self.joystick.get_rc_channels()
-                self.set_rc_channels(rc_values)
+                joystick_state = self.joystick.read_joystick()
+                
+                # Compute ArduSub MANUAL_CONTROL values
+                manual_ctrl = self.joystick.compute_manual_control(joystick_state)
+                
+                # Send MANUAL_CONTROL message (Method-1 for ArduSub)
+                self.pixhawk_connection.send_manual_control(
+                    x=manual_ctrl["x"],
+                    y=manual_ctrl["y"],
+                    z=manual_ctrl["z"],
+                    r=manual_ctrl["r"],
+                    buttons=manual_ctrl["buttons"]
+                )
 
             # Update telemetry from Pixhawk
             self._update_telemetry()

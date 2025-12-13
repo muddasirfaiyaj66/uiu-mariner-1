@@ -652,49 +652,83 @@ class PixhawkConnection:
             self.connected = False  # Mark as disconnected on error
             return False
 
-    def send_manual_control(self, x=0, y=0, z=500, r=0):
+    def send_manual_control(self, x=0, y=0, z=500, r=0, buttons=0):
         """
-        Send MANUAL_CONTROL message (alternative to RC_CHANNELS_OVERRIDE).
+        Send MANUAL_CONTROL message for ArduSub joystick control (Method-1).
 
-        This provides direct normalized control inputs instead of PWM values.
-        Useful for higher-level control interfaces.
+        This is the standard way to control ArduSub vehicles via joystick.
+        The autopilot handles all thruster mixing internally based on vehicle frame.
 
         Args:
-            x (int): Forward/backward motion (-1000 to 1000)
-                    negative = forward, positive = backward
-            y (int): Left/right motion (-1000 to 1000)
-                    negative = left, positive = right
-            z (int): Throttle / depth control (0 to 1000)
-                    500 = neutral for ArduSub
-                    0 = descend, 1000 = ascend
-            r (int): Yaw rotation (-1000 to 1000)
-                    negative = rotate left, positive = rotate right
+            x (int): Surge - Forward/backward motion [-1000 to 1000]
+                    positive = forward, negative = backward
+            y (int): Sway - Left/right strafe motion [-1000 to 1000]
+                    positive = right, negative = left
+            z (int): Heave - Throttle/depth control [0 to 1000]
+                    500 = neutral (hover) for ArduSub
+                    0 = full down, 1000 = full up
+            r (int): Yaw - Rotation [-1000 to 1000]
+                    positive = rotate right, negative = rotate left
+            buttons (int): 16-bit button bitmask for button states
 
         Returns:
             True if message sent successfully, False otherwise
 
         Note:
-            - Less commonly used than RC_CHANNELS_OVERRIDE for direct control
-            - Useful for autonomous guidance systems
+            - This is the PREFERRED method for ArduSub joystick control
+            - ArduSub handles all thruster mixing internally
+            - No need to configure individual PWM channels
+            - Works with any frame type (BlueROV2, Custom 8-thruster, etc.)
         """
+        # Send periodic heartbeat to keep connection alive
+        self._send_periodic_heartbeat()
+        
         if not self.connected:
-            print("[❌] Not connected to Pixhawk - cannot send manual control")
+            self._log_connection_error_with_throttle()
             return False
 
         try:
+            # Clamp values to valid ranges
+            x = max(-1000, min(1000, int(x)))
+            y = max(-1000, min(1000, int(y)))
+            z = max(0, min(1000, int(z)))
+            r = max(-1000, min(1000, int(r)))
+            buttons = int(buttons) & 0xFFFF  # Ensure 16-bit
+            
             # Send MANUAL_CONTROL message
             self.vehicle.mav.manual_control_send(
                 self.vehicle.target_system,
-                x,  # forward/back
-                y,  # left/right
-                z,  # throttle
-                r,  # yaw
-                0,  # buttons (16-bit bitmask)
+                x,       # surge (forward/back)
+                y,       # sway (left/right)
+                z,       # heave (throttle/depth)
+                r,       # yaw (rotation)
+                buttons, # 16-bit button bitmask
             )
+            
+            # Update timing
+            self.last_successful_send_time = time.time()
+            
             return True
         except Exception as e:
-            print(f"[❌] Failed to send manual control: {e}")
+            print(f"[❌] Failed to send MANUAL_CONTROL: {e}")
             return False
+
+    def send_emergency_stop(self):
+        """
+        Send emergency stop command - zero throttle on all axes.
+        
+        This immediately sends a MANUAL_CONTROL message with all values
+        at neutral, effectively stopping all thruster output.
+        
+        Returns:
+            True if sent successfully
+        """
+        print("[🚨 EMERGENCY STOP] Sending zero-throttle command")
+        return self.send_manual_control(x=0, y=0, z=500, r=0, buttons=0)
+
+    # NOTE: Camera controls (photo, video, zoom) are handled locally by the UI.
+    # Camera is connected to Raspberry Pi which streams to ground station.
+    # All camera operations are performed in the UI, NOT via MAVLink to Pixhawk.
 
     def check_connection(self) -> bool:
         """

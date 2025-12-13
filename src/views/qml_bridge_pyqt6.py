@@ -39,6 +39,7 @@ try:
     
     from src.services.mavlinkConnection import PixhawkConnection
     from src.joystickController import JoystickController
+    from src.computer_vision.camera_detector import CameraDetector
     
     # Import workers directly to avoid mainWindow
     import importlib.util
@@ -83,6 +84,13 @@ except Exception as e:
             pass
     class JoystickController:
         def __init__(self, *args, **kwargs):
+            pass
+    class CameraDetector:
+        def __init__(self, *args, **kwargs):
+            pass
+        def set_mode(self, mode):
+            pass
+        def enable(self):
             pass
 
 
@@ -134,11 +142,13 @@ class ROVBackend(QObject):
     # Media signals
     imageCaptured = Signal(str)  # filename
     videoSaved = Signal(str)  # filename
+    mediaFilesChanged = Signal()  # Emitted when gallery needs refresh
     
     # Connection status signals
     piConnectedChanged = Signal(bool)
     pixhawkConnectedChanged = Signal(bool)
     joystickConnectedChanged = Signal(bool)
+    detectionEnabledChanged = Signal(bool)
     
     # Mission timer signal
     toggleMissionTimer = Signal()
@@ -164,6 +174,7 @@ class ROVBackend(QObject):
         self._pi_connected = False
         self._pixhawk_connected = False
         self._joystick_connected = False
+        self._detection_enabled = True  # Object detection enabled by default
         
         # Components (initialized later)
         self.pixhawk = None
@@ -333,6 +344,28 @@ class ROVBackend(QObject):
     
     joystickConnected = Property(bool, getJoystickConnected, setJoystickConnected, notify=joystickConnectedChanged)
     
+    def getDetectionEnabled(self):
+        return self._detection_enabled
+    
+    def setDetectionEnabled(self, value):
+        if self._detection_enabled != value:
+            self._detection_enabled = value
+            self.detectionEnabledChanged.emit(value)
+            print(f"[Detection] Object detection {'ENABLED' if value else 'DISABLED'}")
+            # Update camera workers
+            for worker in self.camera_workers:
+                if value:
+                    worker.enable_detection()
+                else:
+                    worker.disable_detection()
+    
+    detectionEnabled = Property(bool, getDetectionEnabled, setDetectionEnabled, notify=detectionEnabledChanged)
+    
+    @Slot()
+    def toggleDetection(self):
+        """Toggle object detection on/off"""
+        self.setDetectionEnabled(not self._detection_enabled)
+    
     def getActiveCamera(self):
         return self._active_camera
     
@@ -392,9 +425,20 @@ class ROVBackend(QObject):
         try:
             print("[Cameras] Initializing camera streams...")
             
+            # Create detectors for object detection
+            self.detector0 = CameraDetector(camera_id=0)
+            self.detector0.set_mode("contour")
+            self.detector0.enable()
+            
+            self.detector1 = CameraDetector(camera_id=1)
+            self.detector1.set_mode("contour")
+            self.detector1.enable()
+            
             # Camera 0 - Main camera
             url0 = self.config["camera"]["stream_url0"]
             worker0 = CameraWorker(url0, camera_id=0, flip_horizontal=True)
+            worker0.set_detector(self.detector0)
+            worker0.enable_detection()
             worker0.frame_ready.connect(lambda pixmap: self._on_camera_frame(0, pixmap))
             worker0.status_update.connect(lambda status: self._on_camera_status(0, status))
             worker0.start()
@@ -403,16 +447,20 @@ class ROVBackend(QObject):
             # Camera 1 - Secondary camera
             url1 = self.config["camera"]["stream_url1"]
             worker1 = CameraWorker(url1, camera_id=1, flip_horizontal=True)
+            worker1.set_detector(self.detector1)
+            worker1.enable_detection()
             worker1.frame_ready.connect(lambda pixmap: self._on_camera_frame(1, pixmap))
             worker1.status_update.connect(lambda status: self._on_camera_status(1, status))
             worker1.start()
             self.camera_workers.append(worker1)
             
-            print("[Cameras] Camera workers started")
+            print("[Cameras] Camera workers started with OBJECT DETECTION enabled")
             # Cameras connect to Pi, so mark Pi as connected
             self.setPiConnected(True)
         except Exception as e:
             print(f"[Cameras] Initialization error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _init_sensors(self):
         """Initialize sensor telemetry - must run on main thread for Qt signals"""
@@ -596,34 +644,34 @@ class ROVBackend(QObject):
         if not hasattr(self, '_last_button_states'):
             self._last_button_states = {}
         
-        # Button 6 (Back): Toggle Arm/Disarm
-        if buttons.get("back", False) and not self._last_button_states.get("back", False):
-            self.setThrusterArmed(not self._thruster_armed)
+        # Button 6: Toggle Arm/Disarm - call toggleArm() to also send command to Pixhawk
+        if buttons.get("btn6", False) and not self._last_button_states.get("btn6", False):
+            self.toggleArm()  # This updates state AND sends command to Pixhawk
             print(f"[Joystick] Button 6: Thrusters {'ARMED' if self._thruster_armed else 'DISARMED'}")
         
-        # Button 7 (Start): Cycle through cameras
-        if buttons.get("start", False) and not self._last_button_states.get("start", False):
+        # Button 7: Cycle through cameras
+        if buttons.get("btn7", False) and not self._last_button_states.get("btn7", False):
             next_camera = (self._active_camera + 1) % 4
             self.setActiveCamera(next_camera)
             camera_names = ["Front", "Bottom", "Port", "Starboard"]
             print(f"[Joystick] Button 7: Switched to Camera {next_camera + 1} ({camera_names[next_camera]})")
         
-        # Button 3 (Y): Toggle mission timer
-        if buttons.get("y", False) and not self._last_button_states.get("y", False):
+        # Button 3: Toggle mission timer
+        if buttons.get("btn3", False) and not self._last_button_states.get("btn3", False):
             self.toggleMissionTimer.emit()
             print("[Joystick] Button 3: Mission timer toggled")
         
-        # Button 0 (A): Capture picture
-        if buttons.get("a", False) and not self._last_button_states.get("a", False):
+        # Button 0: Capture picture
+        if buttons.get("btn0", False) and not self._last_button_states.get("btn0", False):
             print("[Joystick] Button 0: Capturing image...")
             self.captureImage()
         
-        # Button 1 (B): Toggle recording
-        if buttons.get("b", False) and not self._last_button_states.get("b", False):
+        # Button 1: Toggle recording
+        if buttons.get("btn1", False) and not self._last_button_states.get("btn1", False):
             self.setIsRecording(not self._is_recording)
             print(f"[Joystick] Button 1: Recording {'STARTED' if self._is_recording else 'STOPPED'}")
         
-        # Camera Zoom (Axis 5 = RT zoom in, Axis 4 = LT zoom out)
+        # Camera Zoom (Axis 5 = zoom in, Axis 4 = zoom out)
         if self.joystick and hasattr(self.joystick, 'camera_zoom_in'):
             if self.joystick.camera_zoom_in and self.camera_workers:
                 worker = self.camera_workers[self._active_camera]
@@ -672,6 +720,7 @@ class ROVBackend(QObject):
                     if filename:
                         print(f"[Media] ✅ Image saved: {filename}")
                         self.imageCaptured.emit(filename)
+                        self.mediaFilesChanged.emit()  # Refresh gallery
                     else:
                         print("[Media] ❌ Image capture failed")
                 else:
@@ -723,6 +772,7 @@ class ROVBackend(QObject):
                 if filename:
                     print(f"[Media] ✅ Recording saved: {filename}")
                     self.videoSaved.emit(filename)
+                    self.mediaFilesChanged.emit()  # Refresh gallery
                 else:
                     print("[Media] ⚠️ Recording stopped but no file saved")
         except Exception as e:

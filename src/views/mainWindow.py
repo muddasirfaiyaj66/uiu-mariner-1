@@ -79,10 +79,11 @@ class MarinerROVControl(QMainWindow):
         from .workers.mediaManager import MediaManager
         self.media_manager = MediaManager()
 
-        # Start control loop
+        # Start control loop - ArduSub requires MANUAL_CONTROL at high rate
+        # Must be at least 10Hz (100ms), ideally 20Hz (50ms) for smooth control
         self.control_timer = QTimer(self)
         self.control_timer.timeout.connect(self.control_loop)
-        self.control_timer.start(500)
+        self.control_timer.start(50)  # 20Hz for responsive thruster control
 
         # UI update timer
         self.ui_update_timer = QTimer(self)
@@ -645,10 +646,13 @@ class MarinerROVControl(QMainWindow):
             self.camera_manager.start_all()
             print("[CAMERAS] [OK] Dual MJPEG camera feeds started")
 
-            # Setup object detection
-            self.setup_object_detection()
+            # Setup object detection after a small delay to ensure cameras are ready
+            print("[CAMERAS] Scheduling object detection setup...")
+            QTimer.singleShot(1000, self.setup_object_detection)
         except Exception as e:
             print(f"[CAMERAS] [ERR] Failed to start: {e}")
+            import traceback
+            traceback.print_exc()
 
     def setup_object_detection(self):
         """Setup object detection for both cameras."""
@@ -657,14 +661,16 @@ class MarinerROVControl(QMainWindow):
 
             # Create detector for camera 0 (main camera)
             self.detector0 = CameraDetector(camera_id=0)
-            self.detector0.set_mode("face")  # Default: face/eye/smile detection
+            self.detector0.set_mode("contour")  # Default: contour detection
+            self.detector0.enable()  # Enable detection on the detector object itself
             print(
                 f"[DETECTION] Camera 0 detector created - Mode: {self.detector0.mode}, Enabled: {self.detector0.enabled}"
             )
 
             # Create detector for camera 1 (secondary camera)
             self.detector1 = CameraDetector(camera_id=1)
-            self.detector1.set_mode("face")  # Default: face/eye/smile detection
+            self.detector1.set_mode("contour")  # Default: contour detection
+            self.detector1.enable()  # Enable detection on the detector object itself
             print(
                 f"[DETECTION] Camera 1 detector created - Mode: {self.detector1.mode}, Enabled: {self.detector1.enabled}"
             )
@@ -674,26 +680,20 @@ class MarinerROVControl(QMainWindow):
                 self.camera_manager.camera0.set_detector(self.detector0)
                 self.camera_manager.camera1.set_detector(self.detector1)
 
-                # Enable detection by default
+                # Enable detection on camera workers
                 self.camera_manager.camera0.enable_detection()
                 self.camera_manager.camera1.enable_detection()
 
                 print("[DETECTION] ✅ Object detection ACTIVE on both cameras")
                 print(
-                    f"[DETECTION] Camera 0: detection_enabled={self.camera_manager.camera0.detection_enabled}"
+                    f"[DETECTION] Camera 0: worker_enabled={self.camera_manager.camera0.detection_enabled}, detector_enabled={self.detector0.enabled}"
                 )
                 print(
-                    f"[DETECTION] Camera 1: detection_enabled={self.camera_manager.camera1.detection_enabled}"
+                    f"[DETECTION] Camera 1: worker_enabled={self.camera_manager.camera1.detection_enabled}, detector_enabled={self.detector1.enabled}"
                 )
-                print("[DETECTION] Mode: Face Detection (Face/Eye/Smile)")
-                print(
-                    "[DETECTION] You should see 'FACE DETECTION' text on camera feeds"
-                )
+                print("[DETECTION] Mode: Contour Detection (Rectangle Boxes)")
         except Exception as e:
             print(f"[DETECTION] [ERR] Failed to setup: {e}")
-            import traceback
-
-            traceback.print_exc()
 
     def toggle_detection(self):
         """Toggle object detection on/off."""
@@ -799,13 +799,27 @@ class MarinerROVControl(QMainWindow):
                 self.lblPixhawkStatus.setText(status_html)
 
     def init_joystick(self):
-        """Initialize joystick controller."""
+        """Initialize joystick controller with UI callbacks."""
         try:
             target = self.config.get("joystick_target")
             self.joystick = JoystickController(target_name=target)
 
             if self.joystick.is_connected():
                 print(f"[JOYSTICK] [OK] Connected: {self.joystick.joystick_name}")
+                
+                # Register callbacks for joystick buttons to trigger UI functions
+                self.joystick.set_callback("on_arm", self.toggle_arm)
+                self.joystick.set_callback("on_disarm", self.toggle_arm)
+                self.joystick.set_callback("on_capture_photo", self.capture_image)
+                self.joystick.set_callback("on_video_start", self._start_recording_from_joystick)
+                self.joystick.set_callback("on_video_stop", self._stop_recording_from_joystick)
+                self.joystick.set_callback("on_emergency_stop", self.emergency_stop)
+                self.joystick.set_callback("on_timer_toggle", self.toggle_timer)
+                self.joystick.set_callback("on_camera_switch", self.switch_camera)
+                self.joystick.set_callback("on_camera_zoom_in", self.zoom_in_cameras)
+                self.joystick.set_callback("on_camera_zoom_out", self.zoom_out_cameras)
+                print("[JOYSTICK] [OK] UI callbacks registered")
+                
                 if hasattr(self, "lblJoystickStatus") and self.lblJoystickStatus:
                     status_html = f'<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">{self.joystick.joystick_name} - Ready</span></p></body></html>'
                     self.lblJoystickStatus.setText(status_html)
@@ -1089,25 +1103,35 @@ class MarinerROVControl(QMainWindow):
             if not self._pixhawk_connected:
                 return
 
+            # Read joystick and compute MANUAL_CONTROL values
             joystick_state = self.joystick.read_joystick()
-            channels = self.joystick.compute_thruster_channels(joystick_state)
+            manual_ctrl = self.joystick.compute_manual_control(joystick_state)
 
             if self.armed:
-                self.pixhawk.send_rc_channels_override(channels)
+                # Send MANUAL_CONTROL message - ArduSub handles thruster mixing
+                self.pixhawk.send_manual_control(
+                    x=manual_ctrl["x"],      # surge (forward/back)
+                    y=manual_ctrl["y"],      # sway (left/right)
+                    z=manual_ctrl["z"],      # heave (up/down)
+                    r=manual_ctrl["r"],      # yaw (rotation)
+                    buttons=manual_ctrl["buttons"]
+                )
             else:
                 if not hasattr(self, "_last_arm_warning"):
                     self._last_arm_warning = 0
                 if time.time() - self._last_arm_warning > 5.0:
-                    if any(abs(ch - 1500) > 10 for ch in channels):
+                    # Check if there's any joystick input
+                    if manual_ctrl["x"] or manual_ctrl["y"] or manual_ctrl["z"] != 500 or manual_ctrl["r"]:
                         print(
-                            "[CONTROL]  Commands calculated but NOT sent - System not ARMED!"
+                            "[CONTROL] Commands calculated but NOT sent - System not ARMED!"
                         )
                         print(
-                            f"[CONTROL]  Click 'ARM THRUSTERS' button to enable thruster control"
+                            "[CONTROL] Click 'ARM THRUSTERS' button to enable thruster control"
                         )
                         self._last_arm_warning = time.time()
 
-            self.thruster_values = channels
+            # Store for UI display
+            self.thruster_values = [manual_ctrl["x"], manual_ctrl["y"], manual_ctrl["z"], manual_ctrl["r"]]
 
         except KeyboardInterrupt:
             raise
@@ -1468,6 +1492,44 @@ class MarinerROVControl(QMainWindow):
             print(f"[MEDIA] [OK] Recording stopped: {filepath}")
         except Exception as e:
             print(f"[MEDIA] [ERR] Stop recording failed: {e}")
+
+    def _start_recording_from_joystick(self):
+        """Start recording when triggered from joystick button."""
+        if not self.media_manager or not self.media_manager.is_recording():
+            self.toggle_recording()
+
+    def _stop_recording_from_joystick(self):
+        """Stop recording when triggered from joystick button."""
+        if self.media_manager and self.media_manager.is_recording():
+            self.stop_recording()
+
+    def toggle_timer(self):
+        """Toggle mission timer on/off."""
+        if not hasattr(self, '_timer_running'):
+            self._timer_running = False
+            self._timer_start = 0
+            self._timer_elapsed = 0
+
+        if self._timer_running:
+            # Stop timer
+            self._timer_running = False
+            print(f"[TIMER] Stopped at {self._timer_elapsed:.1f}s")
+        else:
+            # Start timer
+            self._timer_running = True
+            self._timer_start = time.time()
+            print("[TIMER] Started")
+
+    def switch_camera(self):
+        """Switch between camera feeds."""
+        if not self.camera_manager:
+            return
+        
+        self.active_camera = (self.active_camera + 1) % 2
+        print(f"[CAMERA] Switched to Camera {self.active_camera}")
+        
+        # Optionally swap the display feeds
+        # This could swap which camera shows in main vs secondary display
 
     def load_gallery(self):
         """Load media files from the media folder and display in gallery."""

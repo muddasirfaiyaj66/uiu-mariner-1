@@ -412,3 +412,13 @@ class DualCameraManager:
         """Reset zoom on all cameras"""
         for cam in self.cameras:
             cam.reset_zoom()
+
+    def toggle_all_detection(self, enabled):
+        """Toggle detection on all cameras"""
+        for cam in self.cameras:
+            if enabled:
+                cam.enable_detection()
+            else:
+                cam.disable_detection()
+        status = "enabled" if enabled else "disabled"
+        print(f"[CAM_MGR] Detection {status} on all cameras")

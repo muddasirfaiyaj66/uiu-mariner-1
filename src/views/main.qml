@@ -70,6 +70,7 @@ ApplicationWindow {
     property int activeCamera: backend.activeCamera
     property bool thrusterArmed: backend.thrusterArmed
     property bool isRecording: backend.isRecording
+    property bool detectionEnabled: backend.detectionEnabled
     
     // Watch for recording state changes to control recording timer only
     onIsRecordingChanged: {
@@ -87,6 +88,34 @@ ApplicationWindow {
         function onToggleMissionTimer() {
             missionTimerRunning = !missionTimerRunning
             console.log("Mission timer:", missionTimerRunning ? "STARTED" : "STOPPED")
+        }
+    }
+    
+    // Auto-refresh gallery when new media is captured
+    Connections {
+        target: backend
+        function onMediaFilesChanged() {
+            console.log("Media files changed - refreshing gallery")
+            refreshGallery()
+        }
+    }
+    
+    // Function to refresh media gallery
+    function refreshGallery() {
+        if (typeof backend !== 'undefined') {
+            mediaFilesModel.clear()
+            var files = backend.getMediaFiles()
+            for (var i = 0; i < files.length; i++) {
+                mediaFilesModel.append(files[i])
+            }
+            
+            var stats = backend.getMediaStats()
+            if (typeof photosCount !== 'undefined') {
+                photosCount.text = stats.photos_count.toString()
+                photosSize.text = (stats.photos_size / (1024*1024*1024)).toFixed(2) + " GB"
+                videosCount.text = stats.videos_count.toString()
+                videosSize.text = (stats.videos_size / (1024*1024*1024)).toFixed(2) + " GB"
+            }
         }
     }
     property real compassHeading: backend.compassHeading
@@ -669,6 +698,39 @@ ApplicationWindow {
                                             }
 
                                             Item { Layout.fillWidth: true }
+                                            
+                                            // Object Detection Toggle Button
+                                            Rectangle {
+                                                width: 90
+                                                height: 26
+                                                radius: 6
+                                                color: detectionEnabled ? Qt.rgba(0, 0.8, 0.4, 0.3) : Qt.rgba(1, 0.3, 0.3, 0.3)
+                                                border.width: 1
+                                                border.color: detectionEnabled ? appTheme.success : appTheme.error
+                                                
+                                                RowLayout {
+                                                    anchors.centerIn: parent
+                                                    spacing: 4
+                                                    
+                                                    Text {
+                                                        text: "🎯"
+                                                        font.pixelSize: 12
+                                                    }
+                                                    
+                                                    Text {
+                                                        text: detectionEnabled ? "DETECT" : "OFF"
+                                                        color: detectionEnabled ? appTheme.success : appTheme.error
+                                                        font.pixelSize: 10
+                                                        font.bold: true
+                                                    }
+                                                }
+                                                
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: backend.toggleDetection()
+                                                }
+                                            }
 
                                             Row {
                                                 spacing: 8
@@ -1817,21 +1879,7 @@ ApplicationWindow {
                             
                             Button {
                                 text: "🔄 Refresh"
-                                onClicked: {
-                                    if (typeof backend !== 'undefined') {
-                                        mediaFilesModel.clear()
-                                        var files = backend.getMediaFiles()
-                                        for (var i = 0; i < files.length; i++) {
-                                            mediaFilesModel.append(files[i])
-                                        }
-                                        
-                                        var stats = backend.getMediaStats()
-                                        photosCount.text = stats.photos_count.toString()
-                                        photosSize.text = (stats.photos_size / (1024*1024*1024)).toFixed(2) + " GB"
-                                        videosCount.text = stats.videos_count.toString()
-                                        videosSize.text = (stats.videos_size / (1024*1024*1024)).toFixed(2) + " GB"
-                                    }
-                                }
+                                onClicked: refreshGallery()
                             }
                         }
 
@@ -1900,20 +1948,7 @@ ApplicationWindow {
                         }
                         
                         // Auto-load media on page open
-                        Component.onCompleted: {
-                            if (typeof backend !== 'undefined') {
-                                var files = backend.getMediaFiles()
-                                for (var i = 0; i < files.length; i++) {
-                                    mediaFilesModel.append(files[i])
-                                }
-                                
-                                var stats = backend.getMediaStats()
-                                photosCount.text = stats.photos_count.toString()
-                                photosSize.text = (stats.photos_size / (1024*1024*1024)).toFixed(2) + " GB"
-                                videosCount.text = stats.videos_count.toString()
-                                videosSize.text = (stats.videos_size / (1024*1024*1024)).toFixed(2) + " GB"
-                            }
-                        }
+                        Component.onCompleted: refreshGallery()
                     }
 
                     // PAGE 5: SETTINGS
