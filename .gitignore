@@ -56,32 +56,15 @@ htmlcov/
 test_output/
 temp/
 
-# Media (large files)
-media/videos/*.mp4
-media/videos/*.avi
-media/images/*.raw
-media/images/*.tiff
-media/images/*.bmp
-media/images/*.gif
-media/images/*.png
-media/images/*.jpg
-media/images/*.jpeg
-
-media/images/*.svg
-media/images/*.psd
-media/images/*.xcf
-media/audio/*.wav
-
+# Media files (images and videos)
+media/images/*
+media/videos/*
+!media/images/.gitkeep
+!media/videos/.gitkeep
 
 # ROV Specific
 # Camera frames (temporary)
 frames/
-*.jpg
-*.jpeg
-*.png
-!media/images/*.jpg
-!media/images/*.jpeg
-!media/images/*.png
 
 # Video recordings
 *.mov
