@@ -1,38 +1,14 @@
 """
 UIU MARINER - Joystick Controller
 ==================================
-Converts gamepad input to ArduSub MANUAL_CONTROL commands.
-
-JOYSTICK AXIS MAPPING:
+EXACT MAPPING FOR YOUR JOYSTICK:
   LEFT STICK:
-    - Axis 0 (X): Sway (strafe left/right) → thrusters 1-4
-    - Axis 1 (Y): Surge (forward/back)     → thrusters 1-4 (INVERTED)
+    - Axis 0 (X): Sway (strafe left/right)
+    - Axis 1 (Y): Surge (forward/backward)
   
   RIGHT STICK:
     - Axis 2 (X): Yaw (rotate left/right)
-    - Axis 3 (Y): Heave (up/down)          → thrusters 5-8 (INVERTED)
-
-  TRIGGERS:
-    - Axis 4: Camera Zoom OUT
-    - Axis 5: Camera Zoom IN
-
-ArduSub Thruster Layout (Vectored-6DOF):
-  Thrusters 1-4: Horizontal (forward, backward, strafe, yaw)
-  Thrusters 5-8: Vertical (up/down)
-
-MANUAL_CONTROL Message:
-  x: Surge (forward/back) [-1000 to 1000]
-  y: Sway (left/right strafe) [-1000 to 1000]  
-  z: Heave (up/down) [0 to 1000], 500=neutral
-  r: Yaw (rotation) [-1000 to 1000]
-
-BUTTONS:
-  Button 0: Capture Photo
-  Button 1: Toggle Video Recording
-  Button 2: Emergency Stop
-  Button 3: Timer Toggle
-  Button 6: Arm/Disarm
-  Button 7: Switch Camera
+    - Axis 3 (Y): Heave (up/down)
 """
 
 import pygame
@@ -46,27 +22,20 @@ ARDUSUB_Z_MIN = 0
 ARDUSUB_Z_CENTER = 500
 ARDUSUB_Z_MAX = 1000
 
-# RC Channel Range (PWM microseconds)
-RC_MIN = 1000
-RC_CENTER = 1500
-RC_MAX = 2000
-
-# Joystick Configuration - INCREASED DEADZONE to prevent vibration
-DEADZONE = 0.15  # Increased from 0.05 to prevent jitter/vibration
+# Joystick Configuration
+DEADZONE = 0.15
 TRIGGER_DEADZONE = 0.1
 CALIBRATION_DELAY = 1.5
 DEBOUNCE_TIME = 0.2
-
-# Smoothing factor (0.0 = no smoothing, 1.0 = max smoothing)
 SMOOTHING_FACTOR = 0.3
 
-# Debug
-DEBUG_ENABLED = False
-DEBUG_LOG_INTERVAL = 0.5
+# Debug Configuration
+DEBUG_ENABLED = True
+DEBUG_LOG_INTERVAL = 0.2
 
 
 class JoystickController:
-    """ArduSub joystick controller using MANUAL_CONTROL (Mode A)."""
+    """ArduSub joystick controller with exact mapping."""
 
     def __init__(self, joystick_index=0, target_name=None):
         pygame.init()
@@ -86,17 +55,17 @@ class JoystickController:
         self.camera_zoom_in = False
         self.camera_zoom_out = False
 
-        # Smoothing - store previous values to prevent rapid oscillation
-        self._prev_x = 0
-        self._prev_y = 0
-        self._prev_z = ARDUSUB_Z_CENTER
-        self._prev_r = 0
+        # Smoothing
+        self._prev_surge = 0
+        self._prev_sway = 0
+        self._prev_heave = ARDUSUB_Z_CENTER
+        self._prev_yaw = 0
 
         # Button debounce
         self._button_last_press = {}
         self._button_prev_state = {}
 
-        # Callbacks for UI integration
+        # Callbacks
         self._callbacks: Dict[str, Optional[Callable]] = {
             "on_arm": None,
             "on_disarm": None,
@@ -134,6 +103,7 @@ class JoystickController:
         self.joystick.init()
         self.joystick_name = self.joystick.get_name()
         print(f"[JOYSTICK] Connected: {self.joystick_name}")
+        print(f"[JOYSTICK] Axes: {self.joystick.get_numaxes()}, Buttons: {self.joystick.get_numbuttons()}")
 
     def set_callback(self, event_name: str, callback: Callable):
         """Register callback for joystick events."""
@@ -145,12 +115,9 @@ class JoystickController:
         cb = self._callbacks.get(event_name)
         if cb:
             try:
-                print(f"[CALLBACK] Triggering: {event_name}")
                 cb()
             except Exception as e:
                 print(f"[JOYSTICK] Callback error for {event_name}: {e}")
-        else:
-            print(f"[CALLBACK] No handler registered for: {event_name}")
 
     def is_connected(self) -> bool:
         return self.joystick is not None
@@ -159,16 +126,13 @@ class JoystickController:
         return self.is_connected() and time.time() >= self.ready_time
 
     def _get_axis(self, index: int) -> float:
-        """Get axis value with proper deadzone to prevent jitter."""
+        """Get axis value with deadzone."""
         if not self.joystick:
             return 0.0
         try:
             val = self.joystick.get_axis(index)
-            # Apply deadzone - return 0 if within deadzone
             if abs(val) < DEADZONE:
                 return 0.0
-            # Scale the remaining range so movement starts smoothly after deadzone
-            # This prevents sudden jumps when exiting deadzone
             sign = 1 if val > 0 else -1
             scaled = (abs(val) - DEADZONE) / (1.0 - DEADZONE)
             return sign * scaled
@@ -196,30 +160,23 @@ class JoystickController:
                 return True
         return False
 
-    def _to_ardusub(self, val: float, invert: bool = False) -> int:
-        """Convert axis to ArduSub range [-1000, 1000] with clean zero."""
-        if invert:
-            val = -val
-        # If value is essentially zero, return exactly 0
+    def _to_ardusub(self, val: float) -> int:
+        """Convert axis to ArduSub range [-1000, 1000]."""
         if abs(val) < 0.01:
             return 0
         return max(ARDUSUB_MIN, min(ARDUSUB_MAX, int(val * ARDUSUB_MAX)))
 
-    def _to_ardusub_z(self, val: float, invert: bool = True) -> int:
+    def _to_ardusub_z(self, val: float) -> int:
         """Convert axis to ArduSub Z range [0, 1000], 500=neutral."""
-        if invert:
-            val = -val
-        # If value is essentially zero, return exactly center (500)
-        if abs(val) < 0.05:
+        if abs(val) < 0.01:
             return ARDUSUB_Z_CENTER
-        return max(ARDUSUB_Z_MIN, min(ARDUSUB_Z_MAX, int(ARDUSUB_Z_CENTER + val * 500)))
+        # Map -1 (full up) to 0, 0 to 500, +1 (full down) to 1000
+        return int(ARDUSUB_Z_CENTER + val * 500)
 
     def _smooth(self, new_val: int, prev_val: int) -> int:
-        """Apply smoothing to prevent rapid oscillation/vibration."""
-        # If new value is neutral (0 or 500 for z), snap to it immediately
+        """Apply smoothing."""
         if new_val == 0 or new_val == ARDUSUB_Z_CENTER:
             return new_val
-        # Otherwise apply smoothing
         return int(prev_val + (new_val - prev_val) * (1.0 - SMOOTHING_FACTOR))
 
     def read_joystick(self) -> Dict:
@@ -228,15 +185,34 @@ class JoystickController:
             return self._empty_state()
 
         pygame.event.pump()
+        
+        # YOUR EXACT AXIS MAPPING:
+        # Axis 0: Left stick X (left/right) → SWAY
+        # Axis 1: Left stick Y (forward/backward) → SURGE
+        # Axis 2: Right stick X (left/right) → YAW
+        # Axis 3: Right stick Y (up/down) → HEAVE
+        
+        left_x = self._get_axis(0)   # Axis 0: Sway (strafe left/right)
+        left_y = self._get_axis(1)   # Axis 1: Surge (forward/backward)
+        right_x = self._get_axis(2)  # Axis 2: Yaw (rotate left/right)
+        right_y = self._get_axis(3)  # Axis 3: Heave (up/down)
+        
+        # Triggers (if available)
+        try:
+            zoom_out = self._get_axis(4) if self.joystick.get_numaxes() > 4 else 0.0  # LT
+            zoom_in = self._get_axis(5) if self.joystick.get_numaxes() > 5 else 0.0   # RT
+        except:
+            zoom_out = 0.0
+            zoom_in = 0.0
 
         return {
             "axes": {
-                "left_x": self._get_axis(0),   # Sway
-                "left_y": self._get_axis(1),   # Surge
-                "right_x": self._get_axis(2),  # Yaw
-                "right_y": self._get_axis(3),  # Heave
-                "zoom_out": self._get_axis(4), # Camera Zoom OUT
-                "zoom_in": self._get_axis(5),  # Camera Zoom IN
+                "left_x": left_x,    # SWAY (strafe)
+                "left_y": left_y,    # SURGE (forward/back)
+                "right_x": right_x,  # YAW (rotation)
+                "right_y": right_y,  # HEAVE (up/down)
+                "zoom_out": zoom_out,
+                "zoom_in": zoom_in,
             },
             "buttons": {
                 "btn0": self._get_button(0),  # Photo
@@ -258,95 +234,160 @@ class JoystickController:
         """
         Convert joystick to ArduSub MANUAL_CONTROL values.
         
-        Axis Mapping:
-          LEFT STICK:
-            - Axis 0 (X): Sway (y) - strafe left/right → thrusters 1-4
-            - Axis 1 (Y): Surge (x) - forward/back    → thrusters 1-4 (INVERTED)
-          
-          RIGHT STICK:
-            - Axis 2 (X): Yaw (r) - rotate left/right
-            - Axis 3 (Y): Heave (z) - up/down         → thrusters 5-8 (INVERTED)
+        YOUR EXACT MAPPING:
+        -------------------
+        x (surge):    Axis 1 (left_y) = forward/backward
+                      -1.0 = full forward, +1.0 = full backward
         
-        ArduSub handles all thruster mixing internally based on frame type.
+        y (sway):     Axis 0 (left_x) = strafe left/right
+                      -1.0 = full left, +1.0 = full right
+        
+        z (heave):    Axis 3 (right_y) = up/down
+                      -1.0 = full up, +1.0 = full down
+                      Map to: 0=full up, 500=neutral, 1000=full down
+        
+        r (yaw):      Axis 2 (right_x) = rotate left/right
+                      -1.0 = rotate left, +1.0 = rotate right
         """
         axes = state["axes"]
         buttons = state["buttons"]
 
-        # Emergency Stop (Button 2) - highest priority
+        # Emergency Stop (Button 2)
         if self._button_pressed("btn2", buttons.get("btn2", False)):
             self.emergency_stop_active = True
-            self._prev_x = 0
-            self._prev_y = 0
-            self._prev_z = ARDUSUB_Z_CENTER
-            self._prev_r = 0
+            self._prev_surge = 0
+            self._prev_sway = 0
+            self._prev_heave = ARDUSUB_Z_CENTER
+            self._prev_yaw = 0
             print("[🚨 EMERGENCY STOP]")
             self._trigger_callback("on_emergency_stop")
-            return {"x": 0, "y": 0, "z": ARDUSUB_Z_CENTER, "r": 0, "buttons": 0, "emergency_stop": True}
+            return {
+                "x": 0, 
+                "y": 0, 
+                "z": ARDUSUB_Z_CENTER, 
+                "r": 0, 
+                "buttons": 0, 
+                "emergency_stop": True
+            }
 
         if not buttons.get("btn2", False):
             self.emergency_stop_active = False
 
-        # Axis mapping per user's controller:
-        # Left Y (axis 1) → Surge (forward/back) - INVERTED
-        # Left X (axis 0) → Sway (strafe)
-        # Right X (axis 2) → Yaw (rotate)
-        # Right Y (axis 3) → Heave (up/down) - INVERTED
-        raw_surge = self._to_ardusub(axes.get("left_y", 0), invert=True)   # Left Y → Forward/Back
-        raw_sway = self._to_ardusub(axes.get("left_x", 0))                  # Left X → Strafe
-        raw_heave = self._to_ardusub_z(axes.get("right_y", 0), invert=True) # Right Y → Up/Down (thrusters 5-8)
-        raw_yaw = self._to_ardusub(axes.get("right_x", 0))                  # Right X → Yaw
+        # Get raw axis values
+        left_y_raw = axes.get("left_y", 0)   # SURGE (forward/back)
+        left_x_raw = axes.get("left_x", 0)   # SWAY (strafe)
+        right_x_raw = axes.get("right_x", 0) # YAW (rotate)
+        right_y_raw = axes.get("right_y", 0) # HEAVE (up/down)
 
-        # Apply smoothing to prevent vibration/oscillation
-        surge = self._smooth(raw_surge, self._prev_x)
-        sway = self._smooth(raw_sway, self._prev_y)
-        heave = self._smooth(raw_heave, self._prev_z)
-        yaw = self._smooth(raw_yaw, self._prev_r)
+        # ===========================================
+        # DIRECT MAPPING - EXACTLY AS YOU SPECIFIED
+        # ===========================================
+        
+        # IMPORTANT: Check if your joystick needs inversion
+        # Test these options one by one:
+        
+        # OPTION 1: No inversion (standard)
+        # raw_surge = self._to_ardusub(left_y_raw)     # Forward: negative, Backward: positive
+        # raw_sway = self._to_ardusub(left_x_raw)      # Left: negative, Right: positive
+        # raw_yaw = self._to_ardusub(right_x_raw)      # Rotate left: negative, Rotate right: positive
+        # raw_heave = self._to_ardusub_z(right_y_raw)  # Up: negative maps to <500, Down: positive maps to >500
+        
+        # OPTION 2: Invert surge and heave (most common)
+        raw_surge = self._to_ardusub(-left_y_raw)     # Inverted: Forward: positive, Backward: negative
+        raw_sway = self._to_ardusub(left_x_raw)       # No change
+        raw_yaw = self._to_ardusub(right_x_raw)       # No change
+        raw_heave = self._to_ardusub_z(-right_y_raw)  # Inverted: Up: positive maps to <500, Down: negative maps to >500
+        
+        # OPTION 3: All inverted
+        # raw_surge = self._to_ardusub(-left_y_raw)
+        # raw_sway = self._to_ardusub(-left_x_raw)
+        # raw_yaw = self._to_ardusub(-right_x_raw)
+        # raw_heave = self._to_ardusub_z(-right_y_raw)
 
-        # Update previous values for next smoothing cycle
-        self._prev_x = surge
-        self._prev_y = sway
-        self._prev_z = heave
-        self._prev_r = yaw
+        # Apply smoothing
+        surge = self._smooth(raw_surge, self._prev_surge)
+        sway = self._smooth(raw_sway, self._prev_sway)
+        heave = self._smooth(raw_heave, self._prev_heave)
+        yaw = self._smooth(raw_yaw, self._prev_yaw)
 
-        # Camera Zoom (Axis 4 = OUT, Axis 5 = IN)
-        # Note: Triggers typically range from -1 (not pressed) to +1 (fully pressed)
-        # or 0 (not pressed) to 1 (fully pressed) depending on controller
+        # Update previous values
+        self._prev_surge = surge
+        self._prev_sway = sway
+        self._prev_heave = heave
+        self._prev_yaw = yaw
+
+        # Camera Zoom
         zoom_out_raw = axes.get("zoom_out", 0)
         zoom_in_raw = axes.get("zoom_in", 0)
         
-        # Normalize trigger values: convert -1 to 1 range to 0 to 1 range
-        # If trigger is at -1, it's not pressed; if at 1, it's fully pressed
+        # Normalize trigger values
         zoom_in = (zoom_in_raw + 1) / 2 if zoom_in_raw < 0 else zoom_in_raw
         zoom_out = (zoom_out_raw + 1) / 2 if zoom_out_raw < 0 else zoom_out_raw
         
-        if zoom_in > TRIGGER_DEADZONE:
-            if not self.camera_zoom_in:
-                self.camera_zoom_in = True
-                print(f"[ZOOM] IN pressed (value: {zoom_in:.2f})")
-                self._trigger_callback("on_camera_zoom_in")
-        else:
+        if zoom_in > TRIGGER_DEADZONE and not self.camera_zoom_in:
+            self.camera_zoom_in = True
+            self._trigger_callback("on_camera_zoom_in")
+        elif zoom_in <= TRIGGER_DEADZONE:
             self.camera_zoom_in = False
 
-        if zoom_out > TRIGGER_DEADZONE:
-            if not self.camera_zoom_out:
-                self.camera_zoom_out = True
-                print(f"[ZOOM] OUT pressed (value: {zoom_out:.2f})")
-                self._trigger_callback("on_camera_zoom_out")
-        else:
+        if zoom_out > TRIGGER_DEADZONE and not self.camera_zoom_out:
+            self.camera_zoom_out = True
+            self._trigger_callback("on_camera_zoom_out")
+        elif zoom_out <= TRIGGER_DEADZONE:
             self.camera_zoom_out = False
 
         # Button actions
         self._process_buttons(buttons)
 
         # Button bitmask
-        bitmask = sum((1 << i) for i, k in enumerate(["btn0", "btn1", "btn2", "btn3", "btn6", "btn7"]) if buttons.get(k))
+        bitmask = 0
+        if buttons.get("btn0", False): bitmask |= 1 << 0  # Photo
+        if buttons.get("btn1", False): bitmask |= 1 << 1  # Recording
+        if buttons.get("btn2", False): bitmask |= 1 << 2  # Emergency Stop
+        if buttons.get("btn3", False): bitmask |= 1 << 3  # Timer
+        if buttons.get("btn6", False): bitmask |= 1 << 4  # Arm/Disarm
+        if buttons.get("btn7", False): bitmask |= 1 << 5  # Camera Switch
 
-        if DEBUG_ENABLED and time.time() - self._last_log_time > DEBUG_LOG_INTERVAL:
-            if surge or sway or heave != ARDUSUB_Z_CENTER or yaw:
-                print(f"[CTRL] x:{surge:+5d} y:{sway:+5d} z:{heave:4d} r:{yaw:+5d}")
-                self._last_log_time = time.time()
+        # DEBUG OUTPUT - Clear and informative
+        current_time = time.time()
+        if DEBUG_ENABLED and current_time - self._last_log_time > DEBUG_LOG_INTERVAL:
+            print(f"[JOYSTICK INPUT]")
+            print(f"  Left Stick:  X(sway):{left_x_raw:+.3f} Y(surge):{left_y_raw:+.3f}")
+            print(f"  Right Stick: X(yaw):{right_x_raw:+.3f} Y(heave):{right_y_raw:+.3f}")
+            
+            print(f"[ARDUSUB OUTPUT]")
+            print(f"  x(surge):   {surge:+5d} {'(FWD)' if surge < 0 else '(BWD)' if surge > 0 else ''}")
+            print(f"  y(sway):    {sway:+5d} {'(LEFT)' if sway < 0 else '(RIGHT)' if sway > 0 else ''}")
+            print(f"  z(heave):   {heave:4d} {'(UP)' if heave < 500 else '(DOWN)' if heave > 500 else ''}")
+            print(f"  r(yaw):     {yaw:+5d} {'(ROT-L)' if yaw < 0 else '(ROT-R)' if yaw > 0 else ''}")
+            
+            # Movement summary
+            movements = []
+            if abs(surge) > 50:
+                movements.append(f"Surge: {'Forward' if surge < 0 else 'Backward'}")
+            if abs(sway) > 50:
+                movements.append(f"Sway: {'Left' if sway < 0 else 'Right'}")
+            if abs(heave - ARDUSUB_Z_CENTER) > 50:
+                movements.append(f"Heave: {'Up' if heave < 500 else 'Down'}")
+            if abs(yaw) > 50:
+                movements.append(f"Yaw: {'Left' if yaw < 0 else 'Right'}")
+            
+            if movements:
+                print(f"[MOVEMENT] {' | '.join(movements)}")
+            else:
+                print(f"[MOVEMENT] Stationary")
+            
+            print("-" * 50)
+            self._last_log_time = current_time
 
-        return {"x": surge, "y": sway, "z": heave, "r": yaw, "buttons": bitmask, "emergency_stop": False}
+        return {
+            "x": surge,
+            "y": sway, 
+            "z": heave,
+            "r": yaw,
+            "buttons": bitmask,
+            "emergency_stop": False
+        }
 
     def _process_buttons(self, buttons: Dict):
         """Process button presses."""
@@ -381,74 +422,14 @@ class JoystickController:
 
     def get_emergency_stop_command(self) -> Dict:
         """Get emergency stop command."""
-        return {"x": 0, "y": 0, "z": ARDUSUB_Z_CENTER, "r": 0, "buttons": 0, "emergency_stop": True}
-
-    def compute_thruster_channels(self, state: Dict) -> list:
-        """
-        Convert joystick to 8 RC channel values (1000-2000 PWM).
-        This is used by mainWindow for RC_CHANNELS_OVERRIDE.
-        
-        Returns list of 8 channel values.
-        """
-        axes = state["axes"]
-        buttons = state["buttons"]
-
-        # Process button callbacks
-        self._process_buttons(buttons)
-
-        # Camera zoom (Axis 4 = OUT, Axis 5 = IN)
-        # Note: Triggers typically range from -1 (not pressed) to +1 (fully pressed)
-        zoom_out_raw = axes.get("zoom_out", 0)
-        zoom_in_raw = axes.get("zoom_in", 0)
-        
-        # Normalize trigger values
-        zoom_in = (zoom_in_raw + 1) / 2 if zoom_in_raw < 0 else zoom_in_raw
-        zoom_out = (zoom_out_raw + 1) / 2 if zoom_out_raw < 0 else zoom_out_raw
-        
-        if zoom_in > TRIGGER_DEADZONE:
-            if not self.camera_zoom_in:
-                self.camera_zoom_in = True
-                self._trigger_callback("on_camera_zoom_in")
-        else:
-            self.camera_zoom_in = False
-
-        if zoom_out > TRIGGER_DEADZONE:
-            if not self.camera_zoom_out:
-                self.camera_zoom_out = True
-                self._trigger_callback("on_camera_zoom_out")
-        else:
-            self.camera_zoom_out = False
-
-        # Emergency stop check (Button 2)
-        if self._button_pressed("btn2", buttons.get("btn2", False)):
-            self.emergency_stop_active = True
-            print("[🚨 EMERGENCY STOP]")
-            self._trigger_callback("on_emergency_stop")
-            return [RC_CENTER] * 8
-
-        if not buttons.get("btn2", False):
-            self.emergency_stop_active = False
-
-        # Convert axes to RC channel values
-        def axis_to_rc(val: float, invert: bool = False) -> int:
-            if invert:
-                val = -val
-            if abs(val) < DEADZONE:
-                return RC_CENTER
-            return int(RC_CENTER + val * 400)  # Scale to 1100-1900 range
-
-        # Axis mapping to RC channels (per user's joystick layout):
-        # Left Y (axis 1) → Surge (forward/back) - INVERTED
-        # Left X (axis 0) → Sway (strafe)
-        # Right X (axis 2) → Yaw (rotate)
-        # Right Y (axis 3) → Heave (up/down) - INVERTED
-        surge = axis_to_rc(axes.get("left_y", 0), invert=True)
-        sway = axis_to_rc(axes.get("left_x", 0))
-        heave = axis_to_rc(axes.get("right_y", 0), invert=True)
-        yaw = axis_to_rc(axes.get("right_x", 0))
-
-        # Return 8 channels: surge, sway, heave, yaw, then neutral for 5-8
-        return [surge, sway, heave, yaw, RC_CENTER, RC_CENTER, RC_CENTER, RC_CENTER]
+        return {
+            "x": 0, 
+            "y": 0, 
+            "z": ARDUSUB_Z_CENTER, 
+            "r": 0, 
+            "buttons": 0, 
+            "emergency_stop": True
+        }
 
     def close(self):
         """Close joystick."""
@@ -457,3 +438,36 @@ class JoystickController:
             self.joystick = None
         pygame.quit()
         print("[JOYSTICK] Disconnected")
+
+
+# ===========================================
+# TEST CODE
+# ===========================================
+if __name__ == "__main__":
+    print("=" * 60)
+    print("JOYSTICK TEST - YOUR EXACT MAPPING")
+    print("=" * 60)
+    print("Move joysticks and check the mapping:")
+    print("1. Left Stick FORWARD/BACK → Should show 'x(surge)'")
+    print("2. Left Stick LEFT/RIGHT → Should show 'y(sway)'")
+    print("3. Right Stick LEFT/RIGHT → Should show 'r(yaw)'")
+    print("4. Right Stick UP/DOWN → Should show 'z(heave)'")
+    print("=" * 60)
+    print("NOTE: If directions are reversed, change the inversion")
+    print("in the compute_manual_control() method")
+    print("=" * 60)
+    
+    controller = JoystickController()
+    
+    try:
+        while True:
+            if controller.is_ready():
+                state = controller.read_joystick()
+                control = controller.compute_manual_control(state)
+                
+            time.sleep(0.05)
+            
+    except KeyboardInterrupt:
+        print("\nTest stopped by user")
+    finally:
+        controller.close()

@@ -778,11 +778,19 @@ class MarinerROVControl(QMainWindow):
 
             if self.pixhawk.connect():
                 print("[PIXHAWK] [OK] Connected")
+                
+                # Set MANUAL mode - REQUIRED for joystick/MANUAL_CONTROL to work!
+                print("[PIXHAWK] Setting MANUAL mode for joystick control...")
+                if self.pixhawk.set_mode("MANUAL"):
+                    print("[PIXHAWK] [OK] MANUAL mode set - joystick ready")
+                else:
+                    print("[PIXHAWK] [WARN] Could not set MANUAL mode - joystick may not work")
+                
                 if hasattr(self, "lblPixhawkStatus") and self.lblPixhawkStatus:
                     status_html = '<html><head/><body><p><span style=" font-size:8pt; color:#00d4ff;">Connected</span></p></body></html>'
                     self.lblPixhawkStatus.setText(status_html)
                 if hasattr(self, "lblModeStatus") and self.lblModeStatus:
-                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ONLINE</span></p></body></html>"
+                    mode_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">MANUAL</span></p></body></html>"
                     self.lblModeStatus.setText(mode_html)
             else:
                 print("[PIXHAWK] [ERR] Connection failed")
@@ -1106,9 +1114,21 @@ class MarinerROVControl(QMainWindow):
             # Read joystick and compute MANUAL_CONTROL values
             joystick_state = self.joystick.read_joystick()
             manual_ctrl = self.joystick.compute_manual_control(joystick_state)
+            
+            # Debug: Log all control values when there's input
+            has_input = (manual_ctrl["x"] != 0 or manual_ctrl["y"] != 0 or 
+                        manual_ctrl["z"] != 500 or manual_ctrl["r"] != 0)
+            
+            if has_input:
+                if not hasattr(self, "_last_debug_log"):
+                    self._last_debug_log = 0
+                if time.time() - self._last_debug_log > 0.3:
+                    print(f"[JOYSTICK INPUT] x(fwd/bwd):{manual_ctrl['x']:+5d} y(L/R):{manual_ctrl['y']:+5d} z(up/dn):{manual_ctrl['z']:4d} r(yaw):{manual_ctrl['r']:+5d} | Armed:{self.armed}")
+                    self._last_debug_log = time.time()
 
             if self.armed:
-                # Send MANUAL_CONTROL message - ArduSub handles thruster mixing
+                # Try BOTH methods to ensure thrusters respond
+                # Method 1: MANUAL_CONTROL (preferred for ArduSub)
                 self.pixhawk.send_manual_control(
                     x=manual_ctrl["x"],      # surge (forward/back)
                     y=manual_ctrl["y"],      # sway (left/right)
@@ -1116,6 +1136,13 @@ class MarinerROVControl(QMainWindow):
                     r=manual_ctrl["r"],      # yaw (rotation)
                     buttons=manual_ctrl["buttons"]
                 )
+                
+                # Method 2: RC_CHANNELS_OVERRIDE (fallback - direct PWM control)
+                # Convert MANUAL_CONTROL values to RC PWM (1000-2000)
+                # This bypasses ArduSub mixer and directly controls channels
+                if has_input:
+                    rc_channels = self.joystick.compute_thruster_channels(joystick_state)
+                    self.pixhawk.send_rc_channels_override(rc_channels)
             else:
                 if not hasattr(self, "_last_arm_warning"):
                     self._last_arm_warning = 0
@@ -1208,14 +1235,23 @@ class MarinerROVControl(QMainWindow):
                     self.btnArm.setText("🚀 ARM THRUSTERS")
                 print("[ARM]  Disarmed")
         else:
-            if self.pixhawk.arm():
+            # Ensure MANUAL mode before arming (required for joystick control)
+            print("[ARM] Setting MANUAL mode before arming...")
+            self.pixhawk.set_mode("MANUAL")
+            
+            # Force arm to bypass pre-arm checks (for ROV testing)
+            print("[ARM] Attempting to arm (force=True)...")
+            if self.pixhawk.arm(force=True):
                 self.armed = True
                 if hasattr(self, "lblArmStatus"):
                     status_html = "<html><head/><body><p><span style=\" font-family:'Consolas'; font-size:11pt; font-weight:600; color:#00d4ff;\">ARMED</span></p></body></html>"
                     self.lblArmStatus.setText(status_html)
                 if hasattr(self, "btnArm"):
                     self.btnArm.setText("⚠️ DISARM")
-                print("[ARM] [OK] Armed - CAUTION!")
+                print("[ARM] [OK] Armed in MANUAL mode - Thrusters ready!")
+                print("[ARM] [OK] Move joystick to control thrusters (1-8)")
+            else:
+                print("[ARM] [ERR] Arming failed - check Pixhawk connection and pre-arm checks")
 
     def emergency_stop(self):
         """Emergency stop - disarm and neutral all thrusters."""

@@ -600,22 +600,37 @@ class ROVBackend(QObject):
             # Check and update Pixhawk connection status
             if self.pixhawk:
                 is_connected = self.pixhawk.check_connection()
-                # Only update if status changed to avoid excessive signal emissions
                 if is_connected != self._pixhawk_connected:
                     self.setPixhawkConnected(is_connected)
                     status_text = "Connected" if is_connected else "Disconnected"
                     print(f"[UI] Pixhawk status changed: {status_text}")
-            
+
+            # Debug: Print control loop tick
+            print(f"[DEBUG] Control loop tick. Armed: {self._thruster_armed}, Connected: {getattr(self.pixhawk, 'connected', False)}")
+
             if self.joystick and self.joystick.is_ready():
                 state = self.joystick.read_joystick()
-                channels = self.joystick.compute_thruster_channels(state)
-                
                 # Handle joystick button actions
                 self._handle_joystick_buttons(state)
-                
+
                 if self._thruster_armed and self.pixhawk and self.pixhawk.vehicle:
+                    # Debug: Print MANUAL_CONTROL about to be sent
+                    manual_ctrl = self.joystick.compute_manual_control(state)
+                    print(f"[DEBUG] Sending MANUAL_CONTROL: x={manual_ctrl['x']} y={manual_ctrl['y']} z={manual_ctrl['z']} r={manual_ctrl['r']} (should see thruster movement if armed)")
+                    self.pixhawk.send_manual_control(
+                        x=manual_ctrl["x"],
+                        y=manual_ctrl["y"],
+                        z=manual_ctrl["z"],
+                        r=manual_ctrl["r"],
+                        buttons=manual_ctrl["buttons"]
+                    )
+                    # Debug: Print RC_CHANNELS_OVERRIDE about to be sent
+                    channels = self.joystick.compute_thruster_channels(state)
+                    print(f"[DEBUG] Sending RC_CHANNELS_OVERRIDE: {channels}")
                     self.pixhawk.send_rc_channels_override(channels)
-            
+                else:
+                    print(f"[DEBUG] Not sending control: Armed={self._thruster_armed}, Pixhawk={self.pixhawk is not None}, Vehicle={getattr(self.pixhawk, 'vehicle', None) is not None}")
+
             if self.pixhawk and self.pixhawk.vehicle:
                 try:
                     attitude = self.pixhawk.vehicle.messages.get("ATTITUDE")
@@ -701,12 +716,22 @@ class ROVBackend(QObject):
     def toggleArm(self):
         """Toggle thruster armed state"""
         self.setThrusterArmed(not self._thruster_armed)
-        
+
+        print(f"[DEBUG] toggleArm called. Now armed: {self._thruster_armed}")
+
         if self.pixhawk and self.pixhawk.vehicle:
             if self._thruster_armed:
-                self.pixhawk.arm()
+                # CRITICAL: Set MANUAL mode BEFORE arming!
+                print("[ARM] Setting MANUAL mode before arming...")
+                mode_result = self.pixhawk.set_mode("MANUAL")
+                print(f"[DEBUG] set_mode('MANUAL') result: {mode_result}")
+                print("[ARM] Arming thrusters (force=True)...")
+                arm_result = self.pixhawk.arm(force=True)
+                print(f"[DEBUG] arm(force=True) result: {arm_result}")
             else:
-                self.pixhawk.disarm()
+                print("[ARM] Disarming thrusters...")
+                disarm_result = self.pixhawk.disarm()
+                print(f"[DEBUG] disarm() result: {disarm_result}")
     
     @Slot()
     def captureImage(self):

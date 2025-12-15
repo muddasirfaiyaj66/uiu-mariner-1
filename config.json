@@ -1,13 +1,13 @@
 {
-  "mavlink_connection": "tcp:raspberrypi.local:7000",
+  "mavlink_connection": "tcp:192.168.1.100:7000",
   "mavlink_auto_detect": true,
   "joystick_target": null,
   "camera": {
-    "stream_url0": "http://raspberrypi.local:8080/video_feed",
-    "stream_url1": "http://raspberrypi.local:8081/video_feed"
+    "stream_url0": "http://192.168.1.100:8080/video_feed",
+    "stream_url1": "http://192.168.1.100:8081/video_feed"
   },
   "sensors": {
-    "host": "raspberrypi.local",
+    "host": "192.168.1.100",
     "port": 5002,
     "protocol": "tcp",
     "mock_mode": false,
@@ -15,7 +15,7 @@
   },
   "network": {
     "auto_detect": true,
-    "pi_hostname": "raspberrypi.local"
+    "pi_hostname": "192.168.1.100"
   },
   "control": {
     "update_rate_hz": 20,

@@ -679,6 +679,8 @@ class PixhawkConnection:
             - ArduSub handles all thruster mixing internally
             - No need to configure individual PWM channels
             - Works with any frame type (BlueROV2, Custom 8-thruster, etc.)
+            - Vehicle MUST be in MANUAL mode for this to work!
+            - Vehicle MUST be ARMED for thrusters to spin!
         """
         # Send periodic heartbeat to keep connection alive
         self._send_periodic_heartbeat()
@@ -694,6 +696,14 @@ class PixhawkConnection:
             z = max(0, min(1000, int(z)))
             r = max(-1000, min(1000, int(r)))
             buttons = int(buttons) & 0xFFFF  # Ensure 16-bit
+            
+            # Debug logging - only log when there's actual input
+            if not hasattr(self, '_last_manual_log'):
+                self._last_manual_log = 0
+            now = time.time()
+            if (x != 0 or y != 0 or z != 500 or r != 0) and (now - self._last_manual_log > 0.5):
+                print(f"[MANUAL_CONTROL] Sending → x:{x:+5d} y:{y:+5d} z:{z:4d} r:{r:+5d} to SysID:{self.vehicle.target_system}")
+                self._last_manual_log = now
             
             # Send MANUAL_CONTROL message
             self.vehicle.mav.manual_control_send(
